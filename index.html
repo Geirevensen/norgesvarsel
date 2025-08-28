@@ -59,7 +59,7 @@
 
       <div class="mapbox" id="mapbox">
         <img id="map" src="./no.svg" alt="Kart over Norge" />
-        <div id="version-tag">Norgesvarsel v1.7</div>
+        <div id="version-tag">Norgesvarsel v1.8</div>
         <!-- Pins legges inn av JS -->
       </div>
 
@@ -77,7 +77,10 @@
 const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
 const TZ = "Europe/Oslo";
 
-// 10 områder med Yr-ID + ca. posisjon i % av kartets boks
+// Slå på enkel CORS-proxy fra GitHub Pages. Sett til false hvis du bruker egen Worker.
+const USE_PROXY = true;
+
+// 10 områder med Yr-ID + ca. posisjon i % av kartets bildeareal
 const AREAS = [
   { name:"Oslo og østlandsområdet",        id:"1-72837",   x:72, y:82 },
   { name:"Kristiansand og sørlandet",      id:"1-2376",    x:60, y:94 },
@@ -123,9 +126,13 @@ function setLegend(mode) {
   }
 }
 
-// --- Yr API via ID (ikke forsøk å sette User-Agent i browser) ---
+// --- Yr API via ID (med valgfri proxy) ---
 async function fetchById(id) {
-  const url = `https://www.yr.no/api/v0/locations/${id}/forecast`;
+  const yrUrl = `https://www.yr.no/api/v0/locations/${id}/forecast`;
+  const url = USE_PROXY
+    ? `https://api.allorigins.win/raw?url=${encodeURIComponent(yrUrl)}`
+    : yrUrl;
+
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Yr API ${res.status}`);
   return res.json();
@@ -156,41 +163,39 @@ function pickLongSymbolForDate(forecast, targetLocalNoon) {
   return { code, interval: best };
 }
 
-// --- Kort for ett symbol ---
-function cardForSymbol(dateObj, symbolCode) {
-  const div = document.createElement("div");
-  div.className = "icard";
-  const img = document.createElement("img");
-  const label = document.createElement("div"); label.className = "label";
-  const sub = document.createElement("div"); sub.className = "meta";
+// --- Plassering over faktisk bildeareal (object-fit: contain) ---
+function getImageContentRect() {
+  const mapbox = document.getElementById("mapbox");
+  const img = document.getElementById("map");
 
-  const dd = dateObj.toLocaleDateString("no-NO", { weekday:"short", day:"2-digit", month:"short", timeZone: TZ });
-  label.textContent = dd;
+  const box = mapbox.getBoundingClientRect();
+  const naturalW = img.naturalWidth || 1000;
+  const naturalH = img.naturalHeight || 1000;
 
-  if (symbolCode) {
-    img.src = ICON_BASE + symbolCode + ".svg";
-    img.alt = symbolCode.replaceAll("_"," ");
-    sub.textContent = symbolCode;
-  } else {
-    img.alt = "ingen data";
-    sub.textContent = "mangler symbol";
-  }
-  div.appendChild(img); div.appendChild(label); div.appendChild(sub);
-  return div;
+  const scale = Math.min(box.width / naturalW, box.height / naturalH);
+  const contentW = naturalW * scale;
+  const contentH = naturalH * scale;
+
+  const offsetX = (box.width  - contentW) / 2;
+  const offsetY = (box.height - contentH) / 2;
+
+  return { offsetX, offsetY, width: contentW, height: contentH };
 }
 
-// --- Pins på kartet ---
 function clearPins() {
   document.querySelectorAll(".pin, .loc-label").forEach(n => n.remove());
 }
+
 function addPin(name, xPercent, yPercent) {
   const mapbox = document.getElementById("mapbox");
+  const { offsetX, offsetY, width, height } = getImageContentRect();
+
   const pin = document.createElement("div"); pin.className = "pin";
   const lab = document.createElement("div"); lab.className = "loc-label"; lab.textContent = name;
 
-  const rect = mapbox.getBoundingClientRect();
-  const left = (xPercent/100) * rect.width;
-  const top  = (yPercent/100) * rect.height;
+  const left = offsetX + (xPercent/100) * width;
+  const top  = offsetY + (yPercent/100) * height;
+
   pin.style.left = left + "px"; pin.style.top = top + "px";
   lab.style.left = left + "px"; lab.style.top = top + "px";
 
@@ -261,8 +266,13 @@ document.getElementById("refresh").addEventListener("click", render);
 document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", render));
 window.addEventListener("resize", () => { clearPins(); AREAS.forEach(a => addPin(a.name, a.x, a.y)); });
 
-// Første kjøring
-render();
+// Vent på at kartbildet er lastet før første render (for riktige naturalWidth/Height)
+const mapImg = document.getElementById("map");
+if (!mapImg.complete) {
+  mapImg.addEventListener("load", render, { once: true });
+} else {
+  render();
+}
 </script>
 </body>
 </html>
