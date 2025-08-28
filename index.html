@@ -3,207 +3,100 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Norgesvarsel – Oslo på kart</title>
+<title>Norgesvarsel – Oslo ikoner på kart</title>
 <style>
-  :root { --bg:#0b132b; --fg:#eef; --muted:#9fb3c8; --card:#1c2541; --accent:#5bc0be; }
-  body { margin:0; font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
-  header { padding:12px 16px; border-bottom:1px solid #223; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  h1 { font-size:18px; margin:0; }
-  .seg { display:flex; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; overflow:hidden; }
-  .seg label { padding:8px 12px; cursor:pointer; color:#9fb3c8; }
-  .seg input { display:none; }
-  .seg input:checked + span { background:var(--accent); color:#001017; }
-  button { background:#111a2f; color:var(--fg); border:1px solid #2b3558; padding:8px 10px; border-radius:8px; cursor:pointer; }
-
-  .mapwrap { position:relative; height: calc(100vh - 66px); }
-  .mapwrap img { width:100%; height:100%; object-fit:contain; display:block; background:linear-gradient(180deg,#0e1b34,#0a1629); }
+  :root { --accent:#5bc0be; }
+  body { margin:0; background:#0b132b; }
+  .mapwrap { position:relative; height:100vh; }
+  .mapwrap img { width:100%; height:100%; object-fit:contain; display:block; background:#0e1b34; }
   .pin { position:absolute; width:12px; height:12px; border-radius:50%; background:var(--accent); border:2px solid #001017; transform:translate(-50%,-50%); box-shadow:0 0 0 4px rgba(91,192,190,.22); }
-
-  /* Triplet-panel */
-  .triplet-panel {
-    position:absolute;
-    background: var(--card);
-    border:1px solid #2b3558;
-    border-radius: 12px;
-    padding:10px;
-    display:flex;
-    gap:12px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.25);
-    min-width: 290px;
-    z-index: 2;
-  }
-  .icard { width:90px; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px; }
-  .icard img { width:48px; height:48px; }
-  .icard .label { font-weight:600; font-size:13px; }
-  .meta { font-size:12px; color:#9fb3c8; }
-
-  /* Små skjermer: gjør panelet mer kompakt */
-  @media (max-width: 560px) {
-    .triplet-panel { min-width: 0; padding:8px; gap:8px; }
-    .icard { width:80px; padding:6px; }
-    .icard img { width:42px; height:42px; }
-    .icard .label { font-size:12px; }
-  }
-
-  #version { position:absolute; right:10px; bottom:10px; color:#cfe3ffb3; font-size:12px; }
+  .icons { position:absolute; display:flex; gap:6px; }
+  .icons img { width:48px; height:48px; }
+  @media (max-width:560px){ .icons img { width:36px; height:36px; } }
 </style>
 </head>
 <body>
-  <header>
-    <h1>🇳🇴 Norgesvarsel – Oslo på kart</h1>
-    <div class="seg" role="tablist" aria-label="Visning">
-      <label><input type="radio" name="mode" value="weekend" checked><span>Førstkommende helg</span></label>
-      <label><input type="radio" name="mode" value="next3"><span>Neste 3 dager</span></label>
-      <label><input type="radio" name="mode" value="plus7"><span>+7 til +9 dager</span></label>
-    </div>
-    <button id="refresh">Oppdater</button>
-    <div class="meta">Kilde: MET Locationforecast 2.0 (symbol_code)</div>
-  </header>
-
-  <div class="mapwrap" id="mapwrap">
-    <img id="mapimg" src="./no.svg" alt="Kart over Norge">
-    <div id="pin" class="pin" title="Oslo"></div>
-    <div id="panel" class="triplet-panel"></div>
-    <div id="version">v2.1 – Oslo test</div>
-  </div>
+<div class="mapwrap" id="mapwrap">
+  <img id="mapimg" src="./no.svg" alt="Kart over Norge">
+  <div id="pin" class="pin"></div>
+  <div id="icons" class="icons"></div>
+</div>
 
 <script>
 'use strict';
 
-/* ----------------- Konfig ----------------- */
 const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
-const OSLO = { lat: 59.913, lon: 10.739 };
+const OSLO = { lat:59.913, lon:10.739 };
 
-/* ----------------- Tid ----------------- */
-function localNoonNDaysFromNow(n){ const d=new Date(); d.setDate(d.getDate()+n); d.setHours(12,0,0,0); return d; }
-function upcomingWeekendNoons(){ const now=new Date(); const dow=now.getDay(); const df=(5-dow+7)%7;
-  return [localNoonNDaysFromNow(df), localNoonNDaysFromNow(df+1), localNoonNDaysFromNow(df+2)]; }
+const BBOX = { lonMin: 4.4, lonMax: 33.7, latMin: 57.9, latMax: 71.6 };
+function mercY(lat){ const r=Math.max(-85,Math.min(85,lat))*Math.PI/180; return Math.log(Math.tan(Math.PI/4+r/2)); }
+function projectLonLat(lon,lat){
+  const x=(lon-BBOX.lonMin)/(BBOX.lonMax-BBOX.lonMin);
+  const yTop=mercY(BBOX.latMax), yBot=mercY(BBOX.latMin);
+  const y=(yTop-mercY(lat))/(yTop-yBot);
+  return {x,y};
+}
+function getRect(){
+  const wrap=document.getElementById("mapwrap");
+  const img=document.getElementById("mapimg");
+  const box=wrap.getBoundingClientRect();
+  const nw=img.naturalWidth||1000, nh=img.naturalHeight||1000;
+  const s=Math.min(box.width/nw, box.height/nh);
+  const cw=nw*s, ch=nh*s;
+  const ox=(box.width-cw)/2, oy=(box.height-ch)/2;
+  return {ox,oy,w:cw,h:ch};
+}
 
-/* ---------- MET compact (symbol_code) ---------- */
-async function fetchMet(lat, lon){
+async function fetchMet(lat,lon){
   const url=`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
   const res=await fetch(url);
   if(!res.ok) throw new Error(`MET ${res.status}`);
   return res.json();
 }
-function pickSymbolCodeAtLocalNoon(metForecast, dateObj){
-  const ts = metForecast?.properties?.timeseries || [];
-  if(!ts.length) return null;
-  const target = dateObj.getTime();
-  let best=null, bestDiff=Infinity;
-  for(const row of ts){
-    const t=Date.parse(row.time);
-    const diff=Math.abs(t-target);
-    if(diff<bestDiff){ best=row; bestDiff=diff; }
-  }
+function localNoon(dn){ const d=new Date(); d.setDate(d.getDate()+dn); d.setHours(12,0,0,0); return d; }
+function weekendNoons(){
+  const now=new Date(), dow=now.getDay(); const df=(5-dow+7)%7;
+  return [localNoon(df), localNoon(df+1), localNoon(df+2)];
+}
+function pickSymbolCode(met,dateObj){
+  const ts=met?.properties?.timeseries||[]; if(!ts.length) return null;
+  const target=dateObj.getTime(); let best=null,diff=1e15;
+  for(const row of ts){ const t=Date.parse(row.time); const d=Math.abs(t-target); if(d<diff){best=row;diff=d;} }
   if(!best) return null;
-  const d = best.data || {};
+  const d=best.data||{};
   return d.next_6_hours?.summary?.symbol_code
       || d.next_1_hours?.summary?.symbol_code
       || d.next_12_hours?.summary?.symbol_code
       || null;
 }
 
-/* -------- Kart-projeksjon (WebMercator) -------- */
-const BBOX = { lonMin: 4.4, lonMax: 33.7, latMin: 57.9, latMax: 71.6 };
-function mercY(lat){ const r = Math.max(-85, Math.min(85, lat))*Math.PI/180; return Math.log(Math.tan(Math.PI/4 + r/2)); }
-function projectLonLatToUnitXY(lon, lat){
-  const x = (lon - BBOX.lonMin) / (BBOX.lonMax - BBOX.lonMin);
-  const yTop = mercY(BBOX.latMax), yBot = mercY(BBOX.latMin);
-  const y = (yTop - mercY(lat)) / (yTop - yBot);
-  return { x: Math.max(0,Math.min(1,x)), y: Math.max(0,Math.min(1,y)) };
-}
-function getImageContentRect(){
-  const wrap = document.getElementById("mapwrap");
-  const img  = document.getElementById("mapimg");
-  const box = wrap.getBoundingClientRect();
-  const nw = img.naturalWidth || 1000, nh = img.naturalHeight || 1000;
-  const s = Math.min(box.width/nw, box.height/nh);
-  const cw = nw*s, ch = nh*s;
-  const ox = (box.width - cw)/2, oy = (box.height - ch)/2;
-  return { offsetX:ox, offsetY:oy, width:cw, height:ch, boxW:box.width, boxH:box.height };
-}
-
-/* ------- Plassering av pin + panel (med clamping) ------- */
-function placeAt(lon, lat){
-  const { x, y } = projectLonLatToUnitXY(lon, lat);
-  const { offsetX, offsetY, width, height, boxW, boxH } = getImageContentRect();
-  const px = offsetX + x*width;
-  const py = offsetY + y*height;
-
-  const pin = document.getElementById("pin");
-  pin.style.left = px + "px";
-  pin.style.top  = py + "px";
-
-  const panel = document.getElementById("panel");
-  // 1) ønsket posisjon: ved siden av pin (til høyre, vertikalt sentrert)
-  //    men uten transform-triks, vi setter faktiske left/top.
-  //    Vi må vite panelstørrelsen → sett midlertidig posisjon, mål, og så clamp.
-  panel.style.left = (px + 10) + "px";
-  panel.style.top  = (py - 10000) + "px"; // langt opp for å unngå feil scroll mens vi måler
-  const r = panel.getBoundingClientRect();
-
-  let left = px + 10;                  // til høyre for pin
-  let top  = py - r.height/2;          // vertikalt sentrert
-
-  // 2) clamp innenfor kartflaten (8px margin)
-  const M = 8;
-  left = Math.min(Math.max(left, M), boxW - M - r.width);
-  top  = Math.min(Math.max(top,  M), boxH - M - r.height);
-
-  panel.style.left = left + "px";
-  panel.style.top  = top  + "px";
-}
-
-/* ------------- UI-kort ------------- */
-function card(dateObj, code){
-  const div=document.createElement("div"); div.className="icard";
-  const img=document.createElement("img");
-  const label=document.createElement("div"); label.className="label";
-  const sub=document.createElement("div"); sub.className="meta";
-
-  label.textContent=dateObj.toLocaleDateString("no-NO",{weekday:"short",day:"2-digit",month:"short"});
-  if(code){ img.src=ICON_BASE+code+".svg"; img.alt=code.replace(/_/g," "); sub.textContent=code; }
-  else    { img.alt="ingen data"; sub.textContent="mangler symbol_code"; }
-
-  div.appendChild(img); div.appendChild(label); div.appendChild(sub);
-  return div;
-}
-
-/* ------------- Render ------------- */
 async function render(){
-  // plassér pin + panel “foreløpig” for måling
-  placeAt(OSLO.lon, OSLO.lat);
+  const {x,y}=projectLonLat(OSLO.lon,OSLO.lat);
+  const {ox,oy,w,h}=getRect();
+  const px=ox+x*w, py=oy+y*h;
 
-  const mode = document.querySelector('input[name="mode"]:checked').value;
-  const now = new Date(), dow = now.getDay();
-  const dates = mode==="weekend" ? upcomingWeekendNoons()
-              : mode==="next3"   ? ((dow===5)?[localNoonNDaysFromNow(0),localNoonNDaysFromNow(1),localNoonNDaysFromNow(2)]
-                                         : [localNoonNDaysFromNow(1),localNoonNDaysFromNow(2),localNoonNDaysFromNow(3)])
-                                  : [localNoonNDaysFromNow(7),localNoonNDaysFromNow(8),localNoonNDaysFromNow(9)];
+  const pin=document.getElementById("pin");
+  pin.style.left=px+"px"; pin.style.top=py+"px";
 
-  const panel = document.getElementById("panel");
-  panel.innerHTML = "";
+  const icons=document.getElementById("icons");
+  icons.style.left=(px+16)+"px"; icons.style.top=(py-24)+"px"; // til høyre for pin
+  icons.innerHTML="";
+
+  const dates=weekendNoons(); // default: helg
   try{
-    const met = await fetchMet(OSLO.lat, OSLO.lon);
-    dates.forEach(d => panel.appendChild(card(d, pickSymbolCodeAtLocalNoon(met, d))));
-  }catch(e){
-    panel.innerHTML = `<div class="meta" style="color:#ffb4b4">Feil: ${e.message}</div>`;
-    console.error(e);
-  }
-
-  // re-plassér med korrekt panelbredde/høyde og clamp
-  placeAt(OSLO.lon, OSLO.lat);
+    const met=await fetchMet(OSLO.lat,OSLO.lon);
+    dates.forEach(d=>{
+      const code=pickSymbolCode(met,d);
+      const img=document.createElement("img");
+      if(code) img.src=ICON_BASE+code+".svg";
+      else img.alt="ingen data";
+      icons.appendChild(img);
+    });
+  }catch(e){ console.error(e); }
 }
 
-/* ------------- Events ------------- */
-document.getElementById("refresh").addEventListener("click", render);
-document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", render));
-window.addEventListener("resize", () => placeAt(OSLO.lon, OSLO.lat));
-
-const img = document.getElementById("mapimg");
-if (!img.complete) img.addEventListener("load", render, { once:true });
-else render();
+document.getElementById("mapimg").addEventListener("load", render);
+window.addEventListener("resize", render);
 </script>
 </body>
 </html>
