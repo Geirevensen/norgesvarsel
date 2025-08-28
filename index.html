@@ -118,6 +118,22 @@
       s.textContent = "Symboler ca. kl. 12:00 lokal tid";
     }
   }
+// --- Midlertidig: klikk på kartet for å få prosent-koordinater ---
+document.getElementById("mapbox").addEventListener("click", (ev) => {
+  const r = ev.currentTarget.getBoundingClientRect();
+  const xPct = ((ev.clientX - r.left) / r.width) * 100;
+  const yPct = ((ev.clientY - r.top)  / r.height) * 100;
+  const msg = `x:${xPct.toFixed(1)} , y:${yPct.toFixed(1)}`;
+  console.log("[Kart-klikk]", msg);
+  // valgfritt: vis på skjermen
+  let hint = document.getElementById("clickhint");
+  if (!hint) {
+    hint = Object.assign(document.createElement("div"), { id:"clickhint" });
+    hint.style.cssText = "position:fixed;bottom:10px;left:10px;background:#0008;color:#fff;padding:6px 8px;border-radius:8px;font:12px system-ui;z-index:9";
+    document.body.appendChild(hint);
+  }
+  hint.textContent = "Kart-koordinater " + msg + "  (lim inn i AREAS)";
+});
 
   // Tidshjelpere (Europe/Oslo)
   const toLocalOslo = (d) => new Date(d.toLocaleString("en-GB", { timeZone: TZ }));
