@@ -1,39 +1,50 @@
 <!DOCTYPE html>
 <html lang="no">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Norgesvarsel</title>
-  <style>
-    :root { --bg:#0b132b; --fg:#eef; --muted:#9fb3c8; --card:#1c2541; --accent:#5bc0be; }
-    body { margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
-    header { padding:16px 20px; border-bottom:1px solid #223; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    header h1 { font-size:18px; margin:0 10px 0 0; color:#fff; }
-    .controls { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-    .seg { display:flex; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; overflow:hidden; }
-    .seg label { padding:8px 12px; cursor:pointer; color:var(--muted); }
-    .seg input { display:none; }
-    .seg input:checked + span { background:var(--accent); color:#001017; }
-    .wrap { display:grid; grid-template-columns: 1fr; gap:12px; padding:14px; }
-    .panel { background:var(--card); border:1px solid #2b3558; border-radius:14px; overflow:hidden; }
-    .legend { display:flex; align-items:center; gap:16px; padding:12px 14px; border-bottom:1px solid #2b3558; }
-    .legend small { color:var(--muted); }
-    .mapbox { position:relative; min-height:60vh; }
-    .mapbox img { width:100%; height:100%; object-fit:contain; display:block; }
-    #version-tag { position:absolute; bottom:8px; right:12px; background:rgba(0,0,0,.6); color:#fff; padding:4px 8px; font-size:12px; border-radius:6px; pointer-events:none; }
-    .pin { position:absolute; width:12px; height:12px; border-radius:50%; background:var(--accent); border:2px solid #001017; transform:translate(-50%,-50%); box-shadow:0 0 0 4px rgba(91,192,190,.2); }
-    .loc-label { position:absolute; transform:translate(-50%,10px); color:#fff; font-size:12px; background:rgba(0,0,0,.35); padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.15); white-space:nowrap; }
-    .areas { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:14px; padding:14px; }
-    .area-card { background:#0f1a33; border:1px solid #2b3558; border-radius:12px; padding:10px 12px; }
-    .area-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
-    .area-name { font-weight:700; }
-    .meta { font-size:11px; color:#9fb3c8; }
-    .triplet { display:flex; gap:14px; }
-    .icard { display:flex; flex-direction:column; align-items:center; gap:6px; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; padding:8px 10px; width:90px; }
-    .icard img { width:48px; height:48px; }
-    .icard .label { font-weight:600; font-size:13px; }
-    .footer { padding:12px 16px; font-size:12px; color:#b9c5d6; opacity:.8; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Norgesvarsel</title>
+<style>
+  :root { --bg:#0b132b; --fg:#eef; --muted:#9fb3c8; --card:#1c2541; --accent:#5bc0be; }
+  body { margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:16px 20px; border-bottom:1px solid #223; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0 10px 0 0; color:#fff; }
+  .controls { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .seg { display:flex; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; overflow:hidden; }
+  .seg label { padding:8px 12px; cursor:pointer; color:var(--muted); }
+  .seg input { display:none; }
+  .seg input:checked + span { background:var(--accent); color:#001017; }
+  button { background:#111a2f; color:var(--fg); border:1px solid #2b3558; padding:8px 10px; border-radius:8px; cursor:pointer; }
+  .wrap { display:grid; grid-template-columns: 1fr; gap:12px; padding:14px; }
+  .panel { background:var(--card); border:1px solid #2b3558; border-radius:14px; overflow:hidden; }
+  .legend { display:flex; align-items:center; gap:16px; padding:12px 14px; border-bottom:1px solid #2b3558; }
+  .legend small { color:var(--muted); }
+  .mapbox { position:relative; min-height:60vh; }
+  .mapbox img { width:100%; height:100%; object-fit:contain; display:block; }
+  #version-tag { position:absolute; bottom:8px; right:12px; background:rgba(0,0,0,.6); color:#fff; padding:4px 8px; font-size:12px; border-radius:6px; pointer-events:none; }
+  .pin { position:absolute; width:12px; height:12px; border-radius:50%; background:var(--accent); border:2px solid #001017; transform:translate(-50%,-50%); box-shadow:0 0 0 4px rgba(91,192,190,.2); }
+  .loc-label { position:absolute; transform:translate(-50%,10px); color:#fff; font-size:12px; background:rgba(0,0,0,.35); padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.15); white-space:nowrap; }
+  .areas { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:14px; padding:14px; }
+  .area-card { background:#0f1a33; border:1px solid #2b3558; border-radius:12px; padding:10px 12px; }
+  .area-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .area-name { font-weight:700; }
+  .meta { font-size:11px; color:#9fb3c8; }
+  .triplet { display:flex; gap:14px; }
+  .icard { display:flex; flex-direction:column; align-items:center; gap:6px; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; padding:8px 10px; width:90px; }
+  .icard img { width:48px; height:48px; }
+  .icard .label { font-weight:600; font-size:13px; }
+  .footer { padding:12px 16px; font-size:12px; color:#b9c5d6; opacity:.8; }
+
+  /* Responsivitet: krymp labels på små skjermer, og skjul helt under 480px */
+  @media (max-width: 900px) { .loc-label { font-size:11px; } }
+  @media (max-width: 700px) { .loc-label { font-size:10px; padding:1px 4px; } }
+  @media (max-width: 480px) { .loc-label { display:none; } }
+  #calib-hint {
+    position:absolute; top:8px; left:12px; background:rgba(0,0,0,.6); color:#fff;
+    padding:4px 8px; font-size:12px; border-radius:6px; display:none;
+  }
+  #calib-hint code { color:#9fe; }
+</style>
 </head>
 <body>
   <header>
@@ -45,6 +56,7 @@
         <label><input type="radio" name="mode" value="plus7"><span>+7 til +9 dager</span></label>
       </div>
       <button id="refresh">Oppdater</button>
+      <button id="toggle-calib" title="Klikk på kartet for å lese prosentkoordinater">Kalibrer plassering</button>
     </div>
   </header>
 
@@ -59,7 +71,8 @@
 
       <div class="mapbox" id="mapbox">
         <img id="map" src="./no.svg" alt="Kart over Norge" />
-        <div id="version-tag">Norgesvarsel v1.8</div>
+        <div id="version-tag">Norgesvarsel v1.9</div>
+        <div id="calib-hint">Klikk et sted på kartet → <code>x:– , y:–</code></div>
         <!-- Pins legges inn av JS -->
       </div>
 
@@ -77,10 +90,13 @@
 const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
 const TZ = "Europe/Oslo";
 
-// Slå på enkel CORS-proxy fra GitHub Pages. Sett til false hvis du bruker egen Worker.
+// === Proxy-oppsett ===
+// allorigins brukes som standard (enkelt). Bytt til egen Worker ved å sette WORKER_URL.
 const USE_PROXY = true;
+const WORKER_URL = ""; // f.eks. "https://din-worker.workers.dev/?u=" (tom = ikke brukt)
 
-// 10 områder med Yr-ID + ca. posisjon i % av kartets bildeareal
+// 10 områder med Yr-ID + foreløpige posisjoner (% av faktisk bildeareal)
+// Bruk "Kalibrer" og klikk på kartet for å lese riktige x,y. Oppdater verdiene her etter hvert.
 const AREAS = [
   { name:"Oslo og østlandsområdet",        id:"1-72837",   x:72, y:82 },
   { name:"Kristiansand og sørlandet",      id:"1-2376",    x:60, y:94 },
@@ -129,9 +145,16 @@ function setLegend(mode) {
 // --- Yr API via ID (med valgfri proxy) ---
 async function fetchById(id) {
   const yrUrl = `https://www.yr.no/api/v0/locations/${id}/forecast`;
-  const url = USE_PROXY
-    ? `https://api.allorigins.win/raw?url=${encodeURIComponent(yrUrl)}`
-    : yrUrl;
+  let url = yrUrl;
+
+  if (USE_PROXY) {
+    if (WORKER_URL) {
+      url = WORKER_URL + encodeURIComponent(yrUrl);
+    } else {
+      // AllOrigins (enkel, offentlig). OK for testing.
+      url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yrUrl)}`;
+    }
+  }
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Yr API ${res.status}`);
@@ -167,15 +190,13 @@ function pickLongSymbolForDate(forecast, targetLocalNoon) {
 function getImageContentRect() {
   const mapbox = document.getElementById("mapbox");
   const img = document.getElementById("map");
-
   const box = mapbox.getBoundingClientRect();
+
   const naturalW = img.naturalWidth || 1000;
   const naturalH = img.naturalHeight || 1000;
-
   const scale = Math.min(box.width / naturalW, box.height / naturalH);
   const contentW = naturalW * scale;
   const contentH = naturalH * scale;
-
   const offsetX = (box.width  - contentW) / 2;
   const offsetY = (box.height - contentH) / 2;
 
@@ -266,13 +287,37 @@ document.getElementById("refresh").addEventListener("click", render);
 document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", render));
 window.addEventListener("resize", () => { clearPins(); AREAS.forEach(a => addPin(a.name, a.x, a.y)); });
 
-// Vent på at kartbildet er lastet før første render (for riktige naturalWidth/Height)
+// Vent på at kartbildet er lastet før første render
 const mapImg = document.getElementById("map");
-if (!mapImg.complete) {
-  mapImg.addEventListener("load", render, { once: true });
-} else {
-  render();
-}
+if (!mapImg.complete) mapImg.addEventListener("load", render, { once: true });
+else render();
+
+// === Kalibreringsmodus ===
+let calibrating = false;
+const calibBtn = document.getElementById("toggle-calib");
+const calibHint = document.getElementById("calib-hint");
+
+calibBtn.addEventListener("click", () => {
+  calibrating = !calibrating;
+  calibBtn.textContent = calibrating ? "Avslutt kalibrering" : "Kalibrer plassering";
+  calibHint.style.display = calibrating ? "block" : "none";
+});
+
+document.getElementById("mapbox").addEventListener("click", (ev) => {
+  if (!calibrating) return;
+  const mapbox = document.getElementById("mapbox");
+  const rect = mapbox.getBoundingClientRect();
+  const { offsetX, offsetY, width, height } = getImageContentRect();
+
+  const x = ((ev.clientX - rect.left) - offsetX) / width * 100;
+  const y = ((ev.clientY - rect.top)  - offsetY) / height * 100;
+
+  const xP = Math.max(0, Math.min(100, x));
+  const yP = Math.max(0, Math.min(100, y));
+
+  calibHint.innerHTML = `Klikk et sted på kartet → <code>x:${xP.toFixed(1)} , y:${yP.toFixed(1)}</code>  (lim inn i AREAS)`;
+  console.log("[Kalibrering]", `x:${xP.toFixed(1)} , y:${yP.toFixed(1)}`);
+});
 </script>
 </body>
 </html>
