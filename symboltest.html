@@ -52,7 +52,7 @@
     <div id="error" class="meta err" style="display:none;"></div>
 
     <div class="footer">
-      <div>Test v1.4-ID • Oslo ID: <code>1-72837</code></div>
+      <div>Test v1.5-ID • Oslo ID: <code>1-72837</code></div>
       <div>Ikoner: MET weathericons (SVG)</div>
     </div>
   </div>
@@ -61,233 +61,154 @@
 <script>
 'use strict';
 
-// ===== Konfig =====
 const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
 const OSLO_ID = "1-72837";
-const OSLO_LAT = 59.913; // fallback til MET
-const OSLO_LON = 10.739;
+const OSLO_LAT = 59.913, OSLO_LON = 10.739;
 
-// CORS for GitHub Pages
+// GitHub Pages CORS
 const USE_PROXY = true;
-const WORKER_URL = ""; // f.eks. "https://din-worker.workers.dev/?u=" når du har den
+const WORKER_URL = ""; // sett til "https://din-worker.workers.dev/?u=" hvis du lager Worker
 
-// ===== Tidsvalg =====
-function localNoonNDaysFromNow(n) {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  d.setHours(12,0,0,0);
-  return d;
-}
-function upcomingWeekendNoons() {
-  const now = new Date();
-  const dow = now.getDay(); // 0=Sun..6=Sat
-  const daysToFriday = (5 - dow + 7) % 7;
-  return [localNoonNDaysFromNow(daysToFriday),
-          localNoonNDaysFromNow(daysToFriday+1),
-          localNoonNDaysFromNow(daysToFriday+2)];
+// --- Tid ---
+function localNoonNDaysFromNow(n){ const d=new Date(); d.setDate(d.getDate()+n); d.setHours(12,0,0,0); return d; }
+function upcomingWeekendNoons(){ const now=new Date(); const dow=now.getDay(); const df=(5-dow+7)%7;
+  return [localNoonNDaysFromNow(df), localNoonNDaysFromNow(df+1), localNoonNDaysFromNow(df+2)]; }
+
+// --- Normalisering av ikon-koder ---
+function normalizeCode(x){
+  if (x == null) return null;
+  let s = String(x);
+  // hvis det er en .svg-URL → trekk ut filnavn
+  if (/\.svg(\?.*)?$/i.test(s)) s = s.split("/").pop().replace(/\.svg(\?.*)?$/i,"");
+  // standardiser: små bokstaver, bindestrek/space → _, fjern rare tegn, kondensér __
+  s = s.toLowerCase().replace(/[\s-]+/g,"_").replace(/[^a-z0-9_]+/g,"").replace(/_+/g,"_").replace(/^_|_$/g,"");
+  return s || null;
 }
 
-// ===== Hjelpere =====
-function filenameBase(u) {
-  try {
-    const s = String(u);
-    const last = s.split("/").pop() || "";
-    return last.replace(/\.svg(\?.*)?$/i, "");
-  } catch { return null; }
-}
-// Plukk ut symbolkode fra et "symbol"-felt uansett form
-function extractCodeFromSymbol(sym) {
+// --- Parser for Yr ---
+function filenameBase(u){ try{ const last=String(u).split("/").pop()||""; return last.replace(/\.svg(\?.*)?$/i,""); }catch{ return null; } }
+function extractCodeFromSymbol(sym){
   if (!sym) return null;
-  if (typeof sym === "string") {
-    // Kan være "clearsky_day" eller en full URL til svg
-    return /\.svg/i.test(sym) ? filenameBase(sym) : sym;
-  }
-  if (typeof sym === "object") {
-    // Vanlige nøkler
-    if (typeof sym.code === "string") return sym.code;
-    if (typeof sym.symbolCode === "string") return sym.symbolCode;
-    if (typeof sym.symbol_code === "string") return sym.symbol_code;
-    if (typeof sym.id === "string") return sym.id;
-    if (typeof sym.name === "string") return sym.name.toLowerCase().replace(/ /g, "_");
-    // Ikon-URLer
-    if (sym.icon && typeof sym.icon === "object") {
-      const c = filenameBase(sym.icon.svg || sym.icon.url || sym.icon.png);
-      if (c) return c;
+  if (typeof sym === "string") return normalizeCode(sym);
+  if (typeof sym === "object"){
+    const tryFields = [sym.code, sym.symbolCode, sym.symbol_code, sym.id, sym.name, sym.svg, sym.url, sym.png];
+    for (const v of tryFields){ const n = normalizeCode(v); if (n) return n; }
+    if (sym.icon && typeof sym.icon === "object"){
+      const n = normalizeCode(sym.icon.svg || sym.icon.url || sym.icon.png);
+      if (n) return n;
     }
-    if (typeof sym.svg === "string" || typeof sym.url === "string" || typeof sym.png === "string") {
-      const c = filenameBase(sym.svg || sym.url || sym.png);
-      if (c) return c;
-    }
-    // Rekursiv jakt på første streng eller .svg
-    for (const k in sym) {
+    // dyp jakt
+    for (const k in sym){
       const v = sym[k];
-      if (typeof v === "string") {
-        if (/\.svg(\?.*)?$/i.test(v)) return filenameBase(v);
-        if (/^[a-z_]+$/i.test(v)) return v;
-      }
-      if (v && typeof v === "object") {
-        const inner = extractCodeFromSymbol(v);
-        if (inner) return inner;
-      }
+      if (typeof v === "string"){ const n = normalizeCode(v); if (n) return n; }
+      if (v && typeof v === "object"){ const n = extractCodeFromSymbol(v); if (n) return n; }
     }
   }
   return null;
 }
-function symbolFromIntervals(intervals, targetMs) {
+function symbolFromIntervals(intervals, targetMs){
   if (!intervals || !intervals.length) return null;
-  // 1) Intervall som dekker tidspunktet
-  for (const it of intervals) {
+  for (const it of intervals){
     const s = Date.parse(it.start), e = Date.parse(it.end);
-    if (isFinite(s) && isFinite(e) && targetMs >= s && targetMs < e) {
+    if (isFinite(s)&&isFinite(e)&&targetMs>=s&&targetMs<e){
       return extractCodeFromSymbol(it.symbol) || extractCodeFromSymbol(it);
     }
   }
-  // 2) Nærmeste start
   let best=null, diff=Infinity;
-  for (const it of intervals) {
-    const s = Date.parse(it.start);
-    if (!isFinite(s)) continue;
-    const d = Math.abs(targetMs - s);
-    if (d < diff) { best = it; diff = d; }
+  for (const it of intervals){
+    const s = Date.parse(it.start); if (!isFinite(s)) continue;
+    const d = Math.abs(targetMs - s); if (d<diff){ best=it; diff=d; }
   }
   return best ? (extractCodeFromSymbol(best.symbol) || extractCodeFromSymbol(best)) : null;
 }
 
-// ===== Hent fra YR (ID) =====
-async function fetchYrById(id) {
+// --- Hent fra Yr (ID) + fallback til MET ---
+async function fetchYrById(id){
   const yrUrl = `https://www.yr.no/api/v0/locations/${id}/forecast`;
-  let url = yrUrl;
-  if (USE_PROXY) {
-    url = WORKER_URL ? WORKER_URL + encodeURIComponent(yrUrl)
-                     : `https://api.allorigins.win/raw?url=${encodeURIComponent(yrUrl)}`;
-  }
+  const url = USE_PROXY ? (WORKER_URL ? WORKER_URL + encodeURIComponent(yrUrl)
+                                      : `https://api.allorigins.win/raw?url=${encodeURIComponent(yrUrl)}`) : yrUrl;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Yr API ${res.status}`);
   return res.json();
 }
-function pickSymbolFromYr(yrForecast, targetDate) {
-  const t = targetDate.getTime();
-  // Prioriter longIntervals, så shortIntervals
-  return symbolFromIntervals(yrForecast?.longIntervals, t)
-      || symbolFromIntervals(yrForecast?.shortIntervals, t)
-      || null;
-}
+function pickSymbolFromYr(yr, when){ const t=when.getTime();
+  return symbolFromIntervals(yr?.longIntervals, t) || symbolFromIntervals(yr?.shortIntervals, t) || null; }
 
-// ===== Fallback til MET Locationforecast (lat/lon) =====
-async function fetchMet(lat, lon) {
+async function fetchMet(lat,lon){
   const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`MET ${res.status}`);
   return res.json();
 }
-function pickSymbolFromMet(metForecast, targetDate) {
-  const ts = metForecast?.properties?.timeseries || [];
-  if (!ts.length) return null;
-  const T = targetDate.getTime();
-  let best = null, diff = Infinity;
-  for (const row of ts) {
-    const t = Date.parse(row.time);
-    const d = Math.abs(T - t);
-    if (d < diff) { best = row; diff = d; }
-  }
+function pickSymbolFromMet(met, when){
+  const ts = met?.properties?.timeseries || []; if (!ts.length) return null;
+  const T = when.getTime(); let best=null, diff=Infinity;
+  for (const r of ts){ const tt=Date.parse(r.time); const d=Math.abs(T-tt); if (d<diff){ best=r; diff=d; } }
   if (!best) return null;
   const d = best.data || {};
-  return d.next_6_hours?.summary?.symbol_code
-      || d.next_1_hours?.summary?.symbol_code
-      || d.next_12_hours?.summary?.symbol_code
-      || null;
+  return normalizeCode(d.next_6_hours?.summary?.symbol_code
+    || d.next_1_hours?.summary?.symbol_code
+    || d.next_12_hours?.summary?.symbol_code
+    || null);
 }
 
-// ===== UI =====
-function cardForSymbol(dateObj, code) {
-  const div = document.createElement("div");
-  div.className = "icard";
-  const img = document.createElement("img");
-  const label = document.createElement("div"); label.className = "label";
-  const sub = document.createElement("div"); sub.className = "meta";
-  const dd = dateObj.toLocaleDateString("no-NO", { weekday:"short", day:"2-digit", month:"short" });
-  label.textContent = dd;
-
-  if (code) {
-    const c = String(code);
-    img.src = ICON_BASE + c + ".svg";
-    img.alt = c.replace(/_/g, " ");
-    sub.textContent = c;
-  } else {
-    img.alt = "ingen data";
-    sub.textContent = "mangler symbol";
-  }
-  div.appendChild(img); div.appendChild(label); div.appendChild(sub);
-  return div;
+// --- UI ---
+function cardForSymbol(dateObj, code){
+  const div=document.createElement("div"); div.className="icard";
+  const img=document.createElement("img");
+  const label=document.createElement("div"); label.className="label";
+  const sub=document.createElement("div"); sub.className="meta";
+  label.textContent=dateObj.toLocaleDateString("no-NO",{weekday:"short", day:"2-digit", month:"short"});
+  if (code){ img.src=ICON_BASE+code+".svg"; img.alt=code.replace(/_/g," "); sub.textContent=code; }
+  else { img.alt="ingen data"; sub.textContent="mangler symbol"; }
+  div.appendChild(img); div.appendChild(label); div.appendChild(sub); return div;
 }
-function setLegend(mode) {
-  const t = document.getElementById("legend-title");
-  const s = document.getElementById("legend-sub");
-  if (mode === "weekend") { t.textContent = "Førstkommende helg"; s.textContent = "Symboler rundt kl. 12 (fre–søn)"; }
-  else if (mode === "next3") { t.textContent = "Neste 3 dager"; s.textContent = "Symboler rundt kl. 12 (lokal tid)"; }
-  else { t.textContent = "+7 til +9 dager"; s.textContent = "Symboler rundt kl. 12 (lokal tid)"; }
+function setLegend(mode){
+  const t=document.getElementById("legend-title"), s=document.getElementById("legend-sub");
+  if (mode==="weekend"){ t.textContent="Førstkommende helg"; s.textContent="Symboler rundt kl. 12 (fre–søn)"; }
+  else if (mode==="next3"){ t.textContent="Neste 3 dager"; s.textContent="Symboler rundt kl. 12 (lokal tid)"; }
+  else { t.textContent="+7 til +9 dager"; s.textContent="Symboler rundt kl. 12 (lokal tid)"; }
 }
 
-// ===== Render (Oslo) =====
-async function render() {
-  const mode = document.querySelector('input[name="mode"]:checked').value;
+// --- Render ---
+async function render(){
+  const mode=document.querySelector('input[name="mode"]:checked').value;
   setLegend(mode);
-  const box = document.getElementById("box");
-  const err = document.getElementById("error");
-  box.innerHTML = ""; err.style.display = "none"; err.textContent = "";
+  const box=document.getElementById("box"); const err=document.getElementById("error");
+  box.innerHTML=""; err.style.display="none"; err.textContent="";
 
-  // datoer
-  const now = new Date();
-  const dow = now.getDay();
-  const dates =
-    mode === "weekend" ? upcomingWeekendNoons() :
-    mode === "next3"   ? ((dow===5)?[localNoonNDaysFromNow(0),localNoonNDaysFromNow(1),localNoonNDaysFromNow(2)]
-                                  : [localNoonNDaysFromNow(1),localNoonNDaysFromNow(2),localNoonNDaysFromNow(3)])
-                       : [localNoonNDaysFromNow(7),localNoonNDaysFromNow(8),localNoonNDaysFromNow(9)];
+  const now=new Date(); const dow=now.getDay();
+  const dates = mode==="weekend" ? upcomingWeekendNoons()
+              : mode==="next3"   ? ((dow===5)?[localNoonNDaysFromNow(0),localNoonNDaysFromNow(1),localNoonNDaysFromNow(2)]
+                                         : [localNoonNDaysFromNow(1),localNoonNDaysFromNow(2),localNoonNDaysFromNow(3)])
+                                  : [localNoonNDaysFromNow(7),localNoonNDaysFromNow(8),localNoonNDaysFromNow(9)];
 
-  try {
+  try{
     const yr = await fetchYrById(OSLO_ID);
-    dates.forEach(d => {
-      let code = pickSymbolFromYr(yr, d);
-      if (!code) {
-        // Fallback: MET
-        code = null; // set null until fetched
-        box.appendChild(cardForSymbol(d, null));
-      } else {
-        box.appendChild(cardForSymbol(d, code));
-      }
+    const needFallback = [];
+    dates.forEach((d,i)=>{
+      const codeYr = normalizeCode(pickSymbolFromYr(yr, d));
+      if (codeYr){ box.appendChild(cardForSymbol(d, codeYr)); }
+      else { needFallback.push(i); box.appendChild(cardForSymbol(d, null)); }
     });
 
-    // Fyll inn fallback-kort asynkront om noen manglet
-    const needFallback = Array.from(box.children)
-      .map((card, i) => ({card, i}))
-      .filter(x => x.card.querySelector('.meta').textContent === 'mangler symbol');
-
-    if (needFallback.length) {
+    if (needFallback.length){
       const met = await fetchMet(OSLO_LAT, OSLO_LON);
-      needFallback.forEach(({card, i}) => {
-        const code = pickSymbolFromMet(met, dates[i]);
-        const img = card.querySelector('img');
-        const meta = card.querySelector('.meta');
-        if (code) {
-          const c = String(code);
-          img.src = ICON_BASE + c + ".svg";
-          img.alt = c.replace(/_/g, " ");
-          meta.textContent = c;
-        } else {
-          meta.textContent = "mangler symbol";
-        }
+      needFallback.forEach(i=>{
+        const codeMet = pickSymbolFromMet(met, dates[i]);
+        const card = box.children[i];
+        const img = card.querySelector("img");
+        const meta = card.querySelector(".meta");
+        if (codeMet){ img.src=ICON_BASE+codeMet+".svg"; img.alt=codeMet.replace(/_/g," "); meta.textContent=codeMet; }
       });
     }
-  } catch (e) {
-    err.textContent = `Feil: ${e.message}`;
-    err.style.display = "block";
-    console.error(e);
+  }catch(e){
+    err.textContent=`Feil: ${e.message}`; err.style.display="block"; console.error(e);
   }
 }
 
 document.getElementById("refresh").addEventListener("click", render);
-document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", render));
+document.querySelectorAll('input[name="mode"]').forEach(r=>r.addEventListener("change", render));
 render();
 </script>
 </body>
