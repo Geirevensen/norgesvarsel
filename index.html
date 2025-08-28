@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Norge-vær (MVP)</title>
   <style>
+    .mapbox img { width: 100%; height: 100%; object-fit: contain; display: block; }
     :root { --bg:#0b132b; --fg:#eef; --muted:#9fb3c8; --card:#1c2541; --accent:#5bc0be; }
     body { margin:0; font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--fg); }
     header { padding:16px 20px; border-bottom:1px solid #223; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
@@ -65,18 +66,8 @@
         <div class="help">• Klikk «Oppdater» etter å ha endret valg</div>
       </div>
       <div class="mapbox" id="mapbox">
-        <!-- LIM INN SVG-KARTET AV NORGE HER (outline/paths). 
-             Eksempel: Last ned en gratis SVG-outline og lim inn <svg>…</svg> direkte.
-             Tips til kilder: SimpleMaps / MapSVG (gratis) -->
-        <!-- Placeholder: en enkel ramme hvis du ikke har limt inn SVG enda -->
-        <svg id="map" viewBox="0 0 800 1100" aria-label="Kart over Norge (lim inn ekte SVG for penere outline)">
-          <rect x="0" y="0" width="800" height="1100" fill="#0a1629"/>
-          <!-- Valgfritt: Når du limer inn ekte Norge-SVG, sett id="norway" på topp <g> -->
-          <text x="50" y="70" fill="#8aa" font-size="14">Lim inn Norge-SVG her for fin outline</text>
-          <!-- En veldig grov «silhuett» (ikke nøyaktig) bare som visuell plassholder -->
-          <path d="M120,1020 L200,900 L230,800 L260,720 L280,600 L300,520 L330,480 L360,420 L420,360 L480,300 L520,220 L540,160 L560,120 L600,80"
-                fill="none" stroke="#2e3f69" stroke-width="8" stroke-linecap="round"/>
-        </svg>
+        <!-- Skalerbart Norges-kart -->
+          <img id="map" src="./no.svg" alt="Kart over Norge" />
         <div id="pin" class="pin" style="left: 55%; top: 85%;" title="Valgt sted"></div>
         <div id="pinlabel" class="loc-label" style="left: 55%; top: 85%;">Oslo</div>
       </div>
@@ -93,7 +84,7 @@
 
 <script>
   // ===== KONFIG =====
-  const USER_AGENT = "Your Name/Email or URL – hobby prosjekt for å vise vær (yr/MET krav)";
+  const USER_AGENT = "Geir Evensen/geirevensen@hotmail.com – hobbyprosjekt for å vise vær";
   // MET weather icons (GitHub). symbol_code + ".svg".
   // Repo: https://github.com/metno/weathericons  (bruk via jsDelivr CDN for enkel hosting)
   const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/"; // partlycloudy_day.svg, etc.
