@@ -3,311 +3,222 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Norgesvarsel</title>
+<title>Norgesvarsel – Oslo på kart</title>
 <style>
   :root { --bg:#0b132b; --fg:#eef; --muted:#9fb3c8; --card:#1c2541; --accent:#5bc0be; }
-  body { margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
-  header { padding:16px 20px; border-bottom:1px solid #223; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  header h1 { font-size:18px; margin:0 10px 0 0; color:#fff; }
-  .controls { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  body { margin:0; font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:12px 16px; border-bottom:1px solid #223; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; }
   .seg { display:flex; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; overflow:hidden; }
-  .seg label { padding:8px 12px; cursor:pointer; color:var(--muted); }
+  .seg label { padding:8px 12px; cursor:pointer; color:#9fb3c8; }
   .seg input { display:none; }
   .seg input:checked + span { background:var(--accent); color:#001017; }
   button { background:#111a2f; color:var(--fg); border:1px solid #2b3558; padding:8px 10px; border-radius:8px; cursor:pointer; }
-  .wrap { display:grid; grid-template-columns: 1fr; gap:12px; padding:14px; }
-  .panel { background:var(--card); border:1px solid #2b3558; border-radius:14px; overflow:hidden; }
-  .legend { display:flex; align-items:center; gap:16px; padding:12px 14px; border-bottom:1px solid #2b3558; }
-  .legend small { color:var(--muted); }
-  .mapbox { position:relative; min-height:60vh; }
-  .mapbox img { width:100%; height:100%; object-fit:contain; display:block; }
-  #version-tag { position:absolute; bottom:8px; right:12px; background:rgba(0,0,0,.6); color:#fff; padding:4px 8px; font-size:12px; border-radius:6px; pointer-events:none; }
-  .pin { position:absolute; width:12px; height:12px; border-radius:50%; background:var(--accent); border:2px solid #001017; transform:translate(-50%,-50%); box-shadow:0 0 0 4px rgba(91,192,190,.2); }
-  .loc-label { position:absolute; transform:translate(-50%,10px); color:#fff; font-size:12px; background:rgba(0,0,0,.35); padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.15); white-space:nowrap; }
-  @media (max-width: 900px) { .loc-label { font-size:11px; } }
-  @media (max-width: 700px) { .loc-label { font-size:10px; padding:1px 4px; } }
-  @media (max-width: 480px) { .loc-label { display:none; } }
 
-  .areas { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:14px; padding:14px; }
-  .area-card { background:#0f1a33; border:1px solid #2b3558; border-radius:12px; padding:10px 12px; }
-  .area-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
-  .area-name { font-weight:700; }
-  .meta { font-size:11px; color:#9fb3c8; }
-  .triplet { display:flex; gap:14px; }
-  .icard { display:flex; flex-direction:column; align-items:center; gap:6px; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; padding:8px 10px; width:90px; }
+  .mapwrap { position:relative; height: calc(100vh - 66px); }
+  .mapwrap img { width:100%; height:100%; object-fit:contain; display:block; background:linear-gradient(180deg,#0e1b34,#0a1629); }
+  .pin { position:absolute; width:12px; height:12px; border-radius:50%; background:var(--accent); border:2px solid #001017; transform:translate(-50%,-50%); box-shadow:0 0 0 4px rgba(91,192,190,.22); }
+
+  /* Panelet med de tre symbolene som "flyter" ved Oslo */
+  .triplet-panel {
+    position:absolute;
+    transform: translate(10px, -50%); /* standard: til høyre for pin, vertikalt sentrert */
+    background: var(--card);
+    border:1px solid #2b3558;
+    border-radius: 12px;
+    padding:10px;
+    display:flex;
+    gap:12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    min-width: 290px;
+    z-index: 2;
+  }
+  .icard { width:90px; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px; }
   .icard img { width:48px; height:48px; }
   .icard .label { font-weight:600; font-size:13px; }
-  .footer { padding:12px 16px; font-size:12px; color:#b9c5d6; opacity:.8; }
+  .meta { font-size:12px; color:#9fb3c8; }
+
+  /* Små skjermer: gjør panelet mer kompakt */
+  @media (max-width: 560px) {
+    .triplet-panel { min-width: 0; padding:8px; gap:8px; }
+    .icard { width:80px; padding:6px; }
+    .icard img { width:42px; height:42px; }
+    .icard .label { font-size:12px; }
+  }
+
+  #version { position:absolute; right:10px; bottom:10px; color:#cfe3ffb3; font-size:12px; }
 </style>
 </head>
 <body>
   <header>
-    <h1>🇳🇴 Norgesvarsel</h1>
-    <div class="controls">
-      <div class="seg" role="tablist" aria-label="Visning">
-        <label><input type="radio" name="mode" value="weekend" checked><span>Førstkommende helg</span></label>
-        <label><input type="radio" name="mode" value="next3"><span>Neste 3 dager</span></label>
-        <label><input type="radio" name="mode" value="plus7"><span>+7 til +9 dager</span></label>
-      </div>
-      <button id="refresh">Oppdater</button>
+    <h1>🇳🇴 Norgesvarsel – Oslo på kart</h1>
+    <div class="seg" role="tablist" aria-label="Visning">
+      <label><input type="radio" name="mode" value="weekend" checked><span>Førstkommende helg</span></label>
+      <label><input type="radio" name="mode" value="next3"><span>Neste 3 dager</span></label>
+      <label><input type="radio" name="mode" value="plus7"><span>+7 til +9 dager</span></label>
     </div>
+    <button id="refresh">Oppdater</button>
+    <div class="meta">Kilde: MET Locationforecast 2.0 (symbol_code)</div>
   </header>
 
-  <div class="wrap">
-    <div class="panel">
-      <div class="legend">
-        <div>
-          <strong id="legend-title">Førstkommende helg</strong><br>
-          <small id="legend-sub">Symboler rundt lunsjtid for fredag–søndag (Europe/Oslo)</small>
-        </div>
-      </div>
-
-      <div class="mapbox" id="mapbox">
-        <img id="map" src="./no.svg" alt="Kart over Norge" />
-        <div id="version-tag">Norgesvarsel v1.10</div>
-        <!-- Pins legges inn av JS -->
-      </div>
-
-      <div id="areas" class="areas"></div>
-
-      <div class="footer">
-        Data: © MET Norway / yr (Forecast v0, locations/{id}/forecast). Ikoner: MET weathericons (SVG).
-      </div>
-    </div>
+  <div class="mapwrap" id="mapwrap">
+    <img id="mapimg" src="./no.svg" alt="Kart over Norge">
+    <div id="pin" class="pin" title="Oslo"></div>
+    <div id="panel" class="triplet-panel"></div>
+    <div id="version">v2.0 – Oslo test</div>
   </div>
 
 <script>
 'use strict';
 
+/* ----------------- Konfig ----------------- */
 const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
+const OSLO = { lat: 59.913, lon: 10.739 }; // sentrum
 const TZ = "Europe/Oslo";
 
-// === Proxy ===
-// Standard: AllOrigins. Anbefalt: egen Cloudflare Worker – sett WORKER_URL nedenfor.
-const USE_PROXY = true;
-const WORKER_URL = ""; // f.eks. "https://din-worker.workers.dev/?u=" (tom = bruk AllOrigins)
-
-// === Kartprojeksjon ===
-// WebMercator + manuelt valgt geoboks for bildet (fast for fast SVG-kart).
-// Juster ved behov, men dette treffer normalt Norge-kart uten rotasjon.
-const BBOX = {
-  lonMin: 4.0,   // vest (≈ Lista)
-  lonMax: 33.5,  // øst (≈ Kirkenes)
-  latMin: 57.7,  // sør (≈ Skagerrak)
-  latMax: 71.5   // nord (≈ Nordkapp/Sørøya)
-};
-
-function mercY(latDeg) {
-  const lat = Math.max(-85, Math.min(85, latDeg));
-  const rad = lat * Math.PI / 180;
-  return Math.log(Math.tan(Math.PI/4 + rad/2));
+/* ----------------- Tid ----------------- */
+function localNoonNDaysFromNow(n){
+  const d=new Date(); d.setDate(d.getDate()+n); d.setHours(12,0,0,0); return d;
 }
-function projectLonLatToUnitXY(lon, lat) {
-  // x: 0..1 fra lonMin..lonMax, y: 0..1 fra latMax..latMin (topp=0)
+function upcomingWeekendNoons(){
+  const now=new Date(); const dow=now.getDay(); const df=(5-dow+7)%7;
+  return [localNoonNDaysFromNow(df), localNoonNDaysFromNow(df+1), localNoonNDaysFromNow(df+2)];
+}
+
+/* ---------- MET compact (symbol_code) ---------- */
+async function fetchMet(lat, lon){
+  const url=`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
+  const res=await fetch(url);
+  if(!res.ok) throw new Error(`MET ${res.status}`);
+  return res.json();
+}
+function pickSymbolCodeAtLocalNoon(metForecast, dateObj){
+  const ts = metForecast?.properties?.timeseries || [];
+  if(!ts.length) return null;
+  const target = dateObj.getTime();
+  let best=null, bestDiff=Infinity;
+  for(const row of ts){
+    const t=Date.parse(row.time);
+    const diff=Math.abs(t-target);
+    if(diff<bestDiff){ best=row; bestDiff=diff; }
+  }
+  if(!best) return null;
+  const d = best.data || {};
+  return d.next_6_hours?.summary?.symbol_code
+      || d.next_1_hours?.summary?.symbol_code
+      || d.next_12_hours?.summary?.symbol_code
+      || null;
+}
+
+/* -------- Kart-projeksjon (WebMercator) --------
+   Kalibrert bbox for et typisk Norge-SVG uten rotasjon.
+   Juster smått hvis pinnen er litt off. */
+const BBOX = { lonMin: 4.4, lonMax: 33.7, latMin: 57.9, latMax: 71.6 };
+function mercY(lat){
+  const r = Math.max(-85, Math.min(85, lat)) * Math.PI/180;
+  return Math.log(Math.tan(Math.PI/4 + r/2));
+}
+function projectLonLatToUnitXY(lon, lat){
   const x = (lon - BBOX.lonMin) / (BBOX.lonMax - BBOX.lonMin);
   const yTop = mercY(BBOX.latMax), yBot = mercY(BBOX.latMin);
   const y = (yTop - mercY(lat)) / (yTop - yBot);
-  return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
+  return { x: Math.max(0,Math.min(1,x)), y: Math.max(0,Math.min(1,y)) };
 }
-function getImageContentRect() {
-  const mapbox = document.getElementById("mapbox");
-  const img = document.getElementById("map");
-  const box = mapbox.getBoundingClientRect();
-  const naturalW = img.naturalWidth || 1000;
-  const naturalH = img.naturalHeight || 1000;
-  const scale = Math.min(box.width / naturalW, box.height / naturalH);
-  const contentW = naturalW * scale;
-  const contentH = naturalH * scale;
-  const offsetX = (box.width  - contentW) / 2;
-  const offsetY = (box.height - contentH) / 2;
-  return { offsetX, offsetY, width: contentW, height: contentH };
+function getImageContentRect(){
+  const wrap = document.getElementById("mapwrap");
+  const img  = document.getElementById("mapimg");
+  const box = wrap.getBoundingClientRect();
+  const nw = img.naturalWidth || 1000, nh = img.naturalHeight || 1000;
+  const s = Math.min(box.width/nw, box.height/nh);
+  const cw = nw*s, ch = nh*s;
+  const ox = (box.width - cw)/2, oy = (box.height - ch)/2;
+  return { offsetX:ox, offsetY:oy, width:cw, height:ch, boxW:box.width, boxH:box.height };
 }
-function clearPins() {
-  document.querySelectorAll(".pin, .loc-label").forEach(n => n.remove());
-}
-function addPinByLonLat(name, lon, lat) {
+
+/* ------- Plassering av pin + panel ------- */
+function placeAt(lon, lat){
   const { x, y } = projectLonLatToUnitXY(lon, lat);
-  const { offsetX, offsetY, width, height } = getImageContentRect();
-  const left = offsetX + x * width;
-  const top  = offsetY + y * height;
+  const { offsetX, offsetY, width, height, boxW, boxH } = getImageContentRect();
+  const px = offsetX + x*width;
+  const py = offsetY + y*height;
 
-  const mapbox = document.getElementById("mapbox");
-  const pin = document.createElement("div"); pin.className = "pin";
-  const lab = document.createElement("div"); lab.className = "loc-label"; lab.textContent = name;
-  pin.style.left = left + "px"; pin.style.top = top + "px";
-  lab.style.left = left + "px"; lab.style.top = top + "px";
-  mapbox.appendChild(pin); mapbox.appendChild(lab);
-}
+  const pin = document.getElementById("pin");
+  pin.style.left = px + "px";
+  pin.style.top  = py + "px";
 
-// === Områder (ID til Yr, + lat/lon for plassering) ===
-const AREAS = [
-  { name:"Oslo og østlandsområdet",        id:"1-72837",   lat:59.913, lon:10.739 },
-  { name:"Kristiansand og sørlandet",      id:"1-2376",    lat:58.147, lon:7.996 },
-  { name:"Åndalsnes-området og Romsdalen", id:"1-190429",  lat:62.567, lon:7.688 },
-  { name:"Bergen og vestlandet",           id:"1-92416",   lat:60.393, lon:5.324 },
-  { name:"Bohuslen og Göteborg-området",   id:"2-2693301", lat:57.709, lon:11.975 },
-  { name:"Henningsvær og Lofoten",         id:"1-276748",  lat:68.154, lon:14.210 },
-  { name:"Hemsedal og dalstrøka innafor",  id:"5-25115",   lat:60.862, lon:8.552 },
-  { name:"Jotunheimen (Turtagrø)",         id:"1-162272",  lat:61.498, lon:7.751 },
-  { name:"Trøndelag og Midt-Norge",        id:"1-211102",  lat:63.431, lon:10.395 },
-  { name:"Lillehammer, Hafjell og Sjusjøen", id:"1-143669", lat:61.115, lon:10.466 },
-];
+  const panel = document.getElementById("panel");
+  // standard: panel til høyre for pin
+  panel.style.left = px + "px";
+  panel.style.top  = py + "px";
+  panel.style.transform = "translate(10px, -50%)"; // høyre, vertikalt sentrert
 
-// === Tid ===
-const toLocalOslo = (d) => new Date(d.toLocaleString("en-GB", { timeZone: TZ }));
-function localNoon(daysFromToday=0) {
-  const now = toLocalOslo(new Date());
-  const t = new Date(now);
-  t.setDate(now.getDate() + daysFromToday);
-  t.setHours(12,0,0,0);
-  return t;
-}
-function upcomingWeekendNoons() {
-  const now = toLocalOslo(new Date());
-  const dow = now.getDay(); // 0=Sun ... 6=Sat
-  const daysToFriday = (5 - dow + 7) % 7;
-  return [localNoon(daysToFriday), localNoon(daysToFriday+1), localNoon(daysToFriday+2)];
-}
-
-// === UI-tekst ===
-function setLegend(mode) {
-  const t = document.getElementById("legend-title");
-  const s = document.getElementById("legend-sub");
-  if (mode === "weekend") {
-    t.textContent = "Førstkommende helg";
-    s.textContent = "Symboler rundt lunsjtid for fredag–søndag (Europe/Oslo)";
-  } else if (mode === "next3") {
-    t.textContent = "Neste 3 dager";
-    s.textContent = "Symboler ca. kl. 12:00 lokal tid";
-  } else {
-    t.textContent = "+7 til +9 dager";
-    s.textContent = "Symboler ca. kl. 12:00 lokal tid";
+  // hvis det ikke er plass til høyre → flytt til venstre
+  const panelRect = panel.getBoundingClientRect();
+  const expectedRight = px + 10 + panelRect.width;
+  if (expectedRight > boxW - 8) {
+    panel.style.transform = `translate(${-10 - panelRect.width}px, -50%)`;
+  }
+  // hvis panelet går utenfor topp/bunn → knytt til ovenfor pin
+  if (py - panelRect.height/2 < 8) {
+    panel.style.transform += " translate(0px, " + (8 - (py - panelRect.height/2)) + "px)";
+  } else if (py + panelRect.height/2 > boxH - 8) {
+    panel.style.transform += " translate(0px, " + ((boxH - 8) - (py + panelRect.height/2)) + "px)";
   }
 }
 
-// === Yr API (med proxy) ===
-async function fetchById(id) {
-  const yrUrl = `https://www.yr.no/api/v0/locations/${id}/forecast`;
-  let url = yrUrl;
-  if (USE_PROXY) {
-    url = WORKER_URL
-      ? WORKER_URL + encodeURIComponent(yrUrl)
-      : `https://api.allorigins.win/raw?url=${encodeURIComponent(yrUrl)}`;
-  }
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Yr API ${res.status}`);
-  return res.json();
-}
+/* ------------- UI-kort ------------- */
+function card(dateObj, code){
+  const div=document.createElement("div"); div.className="icard";
+  const img=document.createElement("img");
+  const label=document.createElement("div"); label.className="label";
+  const sub=document.createElement("div"); sub.className="meta";
 
-// === Velg long-ikon rundt lokal 12:00 ===
-function pickLongSymbolForDate(forecast, targetLocalNoon) {
-  const longs = forecast?.longIntervals || [];
-  if (!longs.length) return { code:null };
-  const t = targetLocalNoon.getTime();
-  for (const it of longs) {
-    const start = new Date(it.start).getTime();
-    const end   = new Date(it.end).getTime();
-    if (t >= start && t < end) {
-      const code = it.symbol || it.symbolCode || it.symbol_code || null;
-      return { code };
-    }
-  }
-  // fallback: nærmeste start
-  let best=null, bestDiff=Infinity;
-  for (const it of longs) {
-    const diff = Math.abs(new Date(it.start).getTime() - t);
-    if (diff < bestDiff) { best = it; bestDiff = diff; }
-  }
-  const code = best ? (best.symbol || best.symbolCode || best.symbol_code || null) : null;
-  return { code };
-}
+  label.textContent=dateObj.toLocaleDateString("no-NO",{weekday:"short",day:"2-digit",month:"short"});
+  if(code){ img.src=ICON_BASE+code+".svg"; img.alt=code.replace(/_/g," "); sub.textContent=code; }
+  else    { img.alt="ingen data"; sub.textContent="mangler symbol_code"; }
 
-// === UI-kort for ikon ===
-function cardForSymbol(dateObj, symbolCode) {
-  const div = document.createElement("div");
-  div.className = "icard";
-  const img = document.createElement("img");
-  const label = document.createElement("div"); label.className = "label";
-  const sub = document.createElement("div"); sub.className = "meta";
-  const dd = dateObj.toLocaleDateString("no-NO", { weekday:"short", day:"2-digit", month:"short", timeZone: TZ });
-  label.textContent = dd;
-
-  if (symbolCode) {
-    img.src = ICON_BASE + symbolCode + ".svg";
-    img.alt = symbolCode.replaceAll("_"," ");
-    sub.textContent = symbolCode;
-  } else {
-    img.alt = "ingen data";
-    sub.textContent = "mangler symbol";
-  }
   div.appendChild(img); div.appendChild(label); div.appendChild(sub);
   return div;
 }
 
-// === Render ===
-async function render() {
+/* ------------- Render ------------- */
+async function render(){
+  // plasser pin + panel først (så vi har størrelse til bounds-sjekk)
+  placeAt(OSLO.lon, OSLO.lat);
+
+  // datoer
   const mode = document.querySelector('input[name="mode"]:checked').value;
-  setLegend(mode);
+  const now = new Date(), dow = now.getDay();
+  const dates = mode==="weekend" ? upcomingWeekendNoons()
+              : mode==="next3"   ? ((dow===5)?[localNoonNDaysFromNow(0),localNoonNDaysFromNow(1),localNoonNDaysFromNow(2)]
+                                         : [localNoonNDaysFromNow(1),localNoonNDaysFromNow(2),localNoonNDaysFromNow(3)])
+                                  : [localNoonNDaysFromNow(7),localNoonNDaysFromNow(8),localNoonNDaysFromNow(9)];
 
-  // Datoer
-  const now = toLocalOslo(new Date());
-  const dow = now.getDay(); // 0=Sun ... 6=Sat
-  let dates = [];
-  if (mode === "weekend") {
-    dates = upcomingWeekendNoons();
-  } else if (mode === "next3") {
-    dates = (dow === 5) ? [ localNoon(0), localNoon(1), localNoon(2) ] // fredag
-                        : [ localNoon(1), localNoon(2), localNoon(3) ];
-  } else {
-    dates = [ localNoon(7), localNoon(8), localNoon(9) ];
+  // hent symbol_code og vis
+  const panel = document.getElementById("panel");
+  panel.innerHTML = "";
+  try{
+    const met = await fetchMet(OSLO.lat, OSLO.lon);
+    dates.forEach(d => {
+      const code = pickSymbolCodeAtLocalNoon(met, d);
+      panel.appendChild(card(d, code));
+    });
+  }catch(e){
+    panel.innerHTML = `<div class="meta" style="color:#ffb4b4">Feil: ${e.message}</div>`;
+    console.error(e);
   }
 
-  // Pins
-  clearPins();
-  AREAS.forEach(a => addPinByLonLat(a.name, a.lon, a.lat));
-
-  // Kort per område
-  const areasBox = document.getElementById("areas");
-  areasBox.innerHTML = "";
-
-  for (const area of AREAS) {
-    const card = document.createElement("div"); card.className = "area-card";
-    const head = document.createElement("div"); head.className = "area-head";
-    const nm = document.createElement("div"); nm.className = "area-name"; nm.textContent = area.name;
-    const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = `ID: ${area.id}`;
-    head.appendChild(nm); head.appendChild(meta);
-
-    const triplet = document.createElement("div"); triplet.className = "triplet";
-
-    try {
-      const forecast = await fetchById(area.id);
-      dates.forEach(d => {
-        const { code } = pickLongSymbolForDate(forecast, d);
-        triplet.appendChild(cardForSymbol(d, code));
-      });
-    } catch (e) {
-      const warn = document.createElement("div");
-      warn.className = "meta"; warn.style.color = "#ffb4b4";
-      warn.textContent = `Feil fra Yr: ${e.message}`;
-      card.appendChild(head); card.appendChild(warn); areasBox.appendChild(card);
-      console.error("Fetch-feil for", area.name, area.id, e);
-      continue;
-    }
-
-    card.appendChild(head);
-    card.appendChild(triplet);
-    areasBox.appendChild(card);
-  }
+  // re-posisjoner etter at panelens bredde er kjent (for kant-sjekk)
+  placeAt(OSLO.lon, OSLO.lat);
 }
 
-// Events
+/* ------------- Events ------------- */
 document.getElementById("refresh").addEventListener("click", render);
 document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", render));
-window.addEventListener("resize", () => { clearPins(); AREAS.forEach(a => addPinByLonLat(a.name, a.lon, a.lat)); });
+window.addEventListener("resize", () => placeAt(OSLO.lon, OSLO.lat));
 
-// Vent på at kartbildet er lastet før første render
-const mapImg = document.getElementById("map");
-if (!mapImg.complete) mapImg.addEventListener("load", render, { once: true });
+const img = document.getElementById("mapimg");
+if (!img.complete) img.addEventListener("load", render, { once:true });
 else render();
 </script>
 </body>
