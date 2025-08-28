@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Norgesvarsel – ID test (Oslo)</title>
+<style>
+  :root { --bg:#0b132b; --fg:#eef; --muted:#9fb3c8; --card:#1c2541; --accent:#5bc0be; }
+  body { margin:0; font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); display:flex; min-height:100vh; }
+  .wrap { margin:auto; width:min(920px, 96vw); }
+  header { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  h1 { margin:0; font-size:18px; }
+  .seg { display:flex; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; overflow:hidden; }
+  .seg label { padding:8px 12px; cursor:pointer; color:var(--muted); }
+  .seg input { display:none; }
+  .seg input:checked + span { background:var(--accent); color:#001017; }
+  button { background:#111a2f; color:var(--fg); border:1px solid #2b3558; padding:8px 10px; border-radius:8px; cursor:pointer; }
+  .panel { background:var(--card); border:1px solid #2b3558; border-radius:14px; padding:14px; }
+  .legend { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; }
+  .legend small { color:var(--muted); }
+  .triplet { display:flex; gap:14px; flex-wrap:wrap; }
+  .icard { width:110px; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; padding:10px; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .icard img { width:56px; height:56px; }
+  .icard .label { font-weight:600; }
+  .meta { font-size:12px; color:#9fb3c8; }
+  .err { color:#ffb4b4; }
+  .footer { margin-top:10px; font-size:12px; color:#b9c5d6; opacity:.85; display:flex; justify-content:space-between; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🇳🇴 Norgesvarsel – Oslo (ID-test)</h1>
+    <div class="seg" role="tablist" aria-label="Visning">
+      <label><input type="radio" name="mode" value="weekend" checked><span>Førstkommende helg</span></label>
+      <label><input type="radio" name="mode" value="next3"><span>Neste 3 dager</span></label>
+      <label><input type="radio" name="mode" value="plus7"><span>+7 til +9 dager</span></label>
+    </div>
+    <button id="refresh">Oppdater</button>
+  </header>
+
+  <div class="panel">
+    <div class="legend">
+      <div>
+        <strong id="legend-title">Førstkommende helg</strong><br>
+        <small id="legend-sub">Symboler rundt kl. 12 lokal tid (Europe/Oslo)</small>
+      </div>
+      <div class="meta">Kilde: yr.no locations/ID/forecast → longIntervals</div>
+    </div>
+
+    <div id="box" class="triplet"></div>
+
+    <div id="error" class="meta err" style="display:none;"></div>
+
+    <div class="footer">
+      <div>Test v1.0-ID • Oslo ID: <code>1-72837</code></div>
+      <div>Ikoner: MET weathericons (SVG)</div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ===== Konfig =====
+const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
+const TZ = "Europe/Oslo";
+const OSLO_ID = "1-72837";
+
+// CORS: bruk enkel proxy nå (AllOrigins). Anbefalt senere: egen Cloudflare Worker.
+const USE_PROXY = true;
+const WORKER_URL = ""; // f.eks. "https://din-worker.workers.dev/?u=" (tom = bruk AllOrigins)
+
+// ===== Tid =====
+const toLocalOslo = (d) => new Date(d.toLocaleString("en-GB", { timeZone: TZ }));
+function localNoon(daysFromToday=0) {
+  const now = toLocalOslo(new Date());
+  const t = new Date(now);
+  t.setDate(now.getDate() + daysFromToday);
+  t.setHours(12,0,0,0);
+  return t;
+}
+function upcomingWeekendNoons() {
+  const now = toLocalOslo(new Date());
+  const dow = now.getDay(); // 0=Sun ... 6=Sat
+  const daysToFriday = (5 - dow + 7) % 7;
+  return [localNoon(daysToFriday), localNoon(daysToFriday+1), localNoon(daysToFriday+2)];
+}
+
+// ===== UI-tekst =====
+function setLegend(mode) {
+  const t = document.getElementById("legend-title");
+  const s = document.getElementById("legend-sub");
+  if (mode === "weekend") {
+    t.textContent = "Førstkommende helg";
+    s.textContent = "Symboler rundt kl. 12 for fre–søn (Europe/Oslo)";
+  } else if (mode === "next3") {
+    t.textContent = "Neste 3 dager";
+    s.textContent = "Symboler rundt kl. 12 lokal tid";
+  } else {
+    t.textContent = "+7 til +9 dager";
+    s.textContent = "Symboler rundt kl. 12 lokal tid";
+  }
+}
+
+// ===== Yr API (ID) =====
+async function fetchById(id) {
+  const yrUrl = `https://www.yr.no/api/v0/locations/${id}/forecast`;
+  let url = yrUrl;
+  if (USE_PROXY) {
+    url = WORKER_URL
+      ? WORKER_URL + encodeURIComponent(yrUrl)
+      : `https://api.allorigins.win/raw?url=${encodeURIComponent(yrUrl)}`;
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Yr API ${res.status}`);
+  return res.json();
+}
+
+// Finn longInterval-symbol som dekker lokal 12:00 på valgt dato
+function pickLongSymbolForDate(forecast, targetLocalNoon) {
+  const longs = forecast?.longIntervals || [];
+  if (!longs.length) return { code:null };
+  const t = targetLocalNoon.getTime();
+
+  for (const it of longs) {
+    const start = new Date(it.start).getTime();
+    const end   = new Date(it.end).getTime();
+    if (t >= start && t < end) {
+      const code = it.symbol || it.symbolCode || it.symbol_code || null;
+      return { code };
+    }
+  }
+  // fallback: nærmeste start
+  let best=null, bestDiff=Infinity;
+  for (const it of longs) {
+    const diff = Math.abs(new Date(it.start).getTime() - t);
+    if (diff < bestDiff) { best = it; bestDiff = diff; }
+  }
+  const code = best ? (best.symbol || best.symbolCode || best.symbol_code || null) : null;
+  return { code };
+}
+
+// ===== UI-kort =====
+function cardForSymbol(dateObj, symbolCode) {
+  const div = document.createElement("div");
+  div.className = "icard";
+  const img = document.createElement("img");
+  const label = document.createElement("div"); label.className = "label";
+  const sub = document.createElement("div"); sub.className = "meta";
+
+  const dd = dateObj.toLocaleDateString("no-NO", { weekday:"short", day:"2-digit", month:"short", timeZone: TZ });
+  label.textContent = dd;
+
+  if (symbolCode) {
+    img.src = ICON_BASE + symbolCode + ".svg";
+    img.alt = symbolCode.replaceAll("_"," ");
+    sub.textContent = symbolCode;
+  } else {
+    img.alt = "ingen data";
+    sub.textContent = "mangler symbol";
+  }
+  div.appendChild(img); div.appendChild(label); div.appendChild(sub);
+  return div;
+}
+
+// ===== Render (1 sted: Oslo) =====
+async function render() {
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  setLegend(mode);
+  const box = document.getElementById("box");
+  const err = document.getElementById("error");
+  box.innerHTML = ""; err.style.display = "none"; err.textContent = "";
+
+  // Datoer
+  const now = toLocalOslo(new Date());
+  const dow = now.getDay();
+  let dates = [];
+  if (mode === "weekend") {
+    dates = upcomingWeekendNoons(); // fre–søn
+  } else if (mode === "next3") {
+    dates = (dow === 5) ? [ localNoon(0), localNoon(1), localNoon(2) ] // fredag
+                        : [ localNoon(1), localNoon(2), localNoon(3) ];
+  } else {
+    dates = [ localNoon(7), localNoon(8), localNoon(9) ];
+  }
+
+  try {
+    const forecast = await fetchById(OSLO_ID);
+    dates.forEach(d => {
+      const { code } = pickLongSymbolForDate(forecast, d);
+      box.appendChild(cardForSymbol(d, code));
+    });
+  } catch (e) {
+    err.textContent = `Feil fra Yr: ${e.message}`;
+    err.style.display = "block";
+    console.error("Yr-feil (Oslo)", e);
+  }
+}
+
+// Events
+document.getElementById("refresh").addEventListener("click", render);
+document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", render));
+
+// Første kjøring
+render();
+</script>
+</body>
+</html>
