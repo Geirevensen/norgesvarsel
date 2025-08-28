@@ -11,7 +11,7 @@
   header { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
   h1 { margin:0; font-size:18px; }
   .seg { display:flex; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; overflow:hidden; }
-  .seg label { padding:8px 12px; cursor:pointer; color:var(--muted); }
+  .seg label { padding:8px 12px; cursor:pointer; color:#9fb3c8; }
   .seg input { display:none; }
   .seg input:checked + span { background:var(--accent); color:#001017; }
   button { background:#111a2f; color:var(--fg); border:1px solid #2b3558; padding:8px 10px; border-radius:8px; cursor:pointer; }
@@ -52,7 +52,7 @@
     <div id="error" class="meta err" style="display:none;"></div>
 
     <div class="footer">
-      <div>Test v1.1-ID • Oslo ID: <code>1-72837</code></div>
+      <div>Test v1.2-ID • Oslo ID: <code>1-72837</code></div>
       <div>Ikoner: MET weathericons (SVG)</div>
     </div>
   </div>
@@ -65,11 +65,11 @@
 const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
 const OSLO_ID = "1-72837";
 
-// CORS: enkel proxy nå (AllOrigins). For produksjon anbefaler jeg egen Cloudflare Worker.
+// CORS: enkel proxy nå (AllOrigins). For produksjon er Cloudflare Worker best.
 const USE_PROXY = true;
-const WORKER_URL = ""; // fyll inn "https://din-worker.workers.dev/?u=" hvis du lager Worker
+const WORKER_URL = ""; // "https://din-worker.workers.dev/?u=" hvis du lager Worker
 
-// ===== Tidsvalg (bruker vanlig lokal tid – robust) =====
+// ===== Tidsvalg =====
 function localNoonNDaysFromNow(n) {
   const d = new Date();
   d.setDate(d.getDate() + n);
@@ -99,19 +99,37 @@ async function fetchById(id) {
   return res.json();
 }
 
-// --- Velg symbol (foretrekker longIntervals; fallback til shortIntervals) ---
+// --- Robust uthenting av symbolkode uansett struktur ---
+function getSymbolCodeAny(interval) {
+  // 1) symbol direkte som streng
+  if (typeof interval.symbol === "string") return interval.symbol;
+  // 2) symbol som objekt med felt
+  if (interval.symbol && typeof interval.symbol === "object") {
+    if (typeof interval.symbol.code === "string") return interval.symbol.code;
+    if (typeof interval.symbol.id === "string")   return interval.symbol.id;
+    if (typeof interval.symbol.name === "string") return interval.symbol.name;
+  }
+  // 3) alternative felt
+  if (typeof interval.symbolCode === "string") return interval.symbolCode;
+  if (typeof interval.symbol_code === "string") return interval.symbol_code;
+  // 4) ellers prøv å stringify'e forsiktig
+  if (interval.symbol != null) return String(interval.symbol);
+  return null;
+}
+
+// --- Velg symbol (longIntervals foretrukket; fallback til shortIntervals) ---
 function pickFromIntervals(arr, targetMs) {
   if (!arr || !arr.length) return null;
 
-  // 1) Finn intervall som dekker t
+  // intervall som dekker tidspunktet
   for (const it of arr) {
     const start = Date.parse(it.start);
     const end   = Date.parse(it.end);
     if (isFinite(start) && isFinite(end) && targetMs >= start && targetMs < end) {
-      return it.symbol || it.symbolCode || it.symbol_code || null;
+      return getSymbolCodeAny(it);
     }
   }
-  // 2) Fallback: nærmeste start
+  // nærmest start
   let best=null, bestDiff=Infinity;
   for (const it of arr) {
     const start = Date.parse(it.start);
@@ -119,21 +137,20 @@ function pickFromIntervals(arr, targetMs) {
     const diff = Math.abs(start - targetMs);
     if (diff < bestDiff) { best = it; bestDiff = diff; }
   }
-  return best ? (best.symbol || best.symbolCode || best.symbol_code || null) : null;
+  return best ? getSymbolCodeAny(best) : null;
 }
 
 function pickSymbolForDate(forecast, targetDate) {
   const t = targetDate.getTime();
-  // longIntervals (dag/natt)
-  let code = pickFromIntervals(forecast.longIntervals, t);
-  if (code) return code;
-  // shortIntervals (timevise, ~90 t frem)
-  code = pickFromIntervals(forecast.shortIntervals, t);
-  return code || null;
+  return (
+    pickFromIntervals(forecast.longIntervals, t) ||
+    pickFromIntervals(forecast.shortIntervals, t) ||
+    null
+  );
 }
 
 // ===== UI-kort =====
-function cardForSymbol(dateObj, symbolCode) {
+function cardForSymbol(dateObj, symbolCodeRaw) {
   const div = document.createElement("div");
   div.className = "icard";
   const img = document.createElement("img");
@@ -143,10 +160,11 @@ function cardForSymbol(dateObj, symbolCode) {
   const dd = dateObj.toLocaleDateString("no-NO", { weekday:"short", day:"2-digit", month:"short" });
   label.textContent = dd;
 
-  if (symbolCode) {
-    img.src = ICON_BASE + symbolCode + ".svg";
-    img.alt = symbolCode.replaceAll("_"," ");
-    sub.textContent = symbolCode;
+  const code = (symbolCodeRaw != null) ? String(symbolCodeRaw) : ""; // tving til streng
+  if (code) {
+    img.src = ICON_BASE + code + ".svg";
+    img.alt = code.replace(/_/g, " ");  // regex i stedet for replaceAll
+    sub.textContent = code;
   } else {
     img.alt = "ingen data";
     sub.textContent = "mangler symbol";
@@ -168,9 +186,10 @@ async function render() {
   const err = document.getElementById("error");
   box.innerHTML = ""; err.style.display = "none"; err.textContent = "";
 
-  let dates = [];
+  // datoer
   const now = new Date();
   const dow = now.getDay();
+  let dates = [];
   if (mode === "weekend") {
     dates = upcomingWeekendNoons();
   } else if (mode === "next3") {
@@ -182,10 +201,6 @@ async function render() {
 
   try {
     const forecast = await fetchById(OSLO_ID);
-    // Hjelpedebug om strukturen er annerledes
-    if (!forecast.longIntervals && !forecast.shortIntervals) {
-      console.warn("Uventet JSON fra Yr:", forecast);
-    }
     dates.forEach(d => {
       const code = pickSymbolForDate(forecast, d);
       box.appendChild(cardForSymbol(d, code));
