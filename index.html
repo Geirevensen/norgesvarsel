@@ -33,6 +33,18 @@
     .loc-label { position:absolute; transform:translate(-50%,10px); color:#fff; font-size:12px; background:rgba(0,0,0,.35); padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.15);}
     .help { color:#a8bed9; }
     a { color:#8ed7ff; }
+    #version-tag {
+      position: absolute;
+      bottom: 8px;
+      right: 12px;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 6px;
+      pointer-events: none; /* så den ikke fanger klikk */
+    }
+
   </style>
 </head>
 <body>
@@ -68,6 +80,7 @@
       <div class="mapbox" id="mapbox">
         <!-- Skalerbart Norges-kart -->
           <img id="map" src="./no.svg" alt="Kart over Norge" />
+        <div id="version-tag">Norgesvarsel v1.5</div>
         <div id="pin" class="pin" style="left: 55%; top: 85%;" title="Valgt sted"></div>
         <div id="pinlabel" class="loc-label" style="left: 55%; top: 85%;">Oslo</div>
       </div>
