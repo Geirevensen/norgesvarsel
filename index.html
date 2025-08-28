@@ -24,6 +24,10 @@
   #version-tag { position:absolute; bottom:8px; right:12px; background:rgba(0,0,0,.6); color:#fff; padding:4px 8px; font-size:12px; border-radius:6px; pointer-events:none; }
   .pin { position:absolute; width:12px; height:12px; border-radius:50%; background:var(--accent); border:2px solid #001017; transform:translate(-50%,-50%); box-shadow:0 0 0 4px rgba(91,192,190,.2); }
   .loc-label { position:absolute; transform:translate(-50%,10px); color:#fff; font-size:12px; background:rgba(0,0,0,.35); padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.15); white-space:nowrap; }
+  @media (max-width: 900px) { .loc-label { font-size:11px; } }
+  @media (max-width: 700px) { .loc-label { font-size:10px; padding:1px 4px; } }
+  @media (max-width: 480px) { .loc-label { display:none; } }
+
   .areas { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:14px; padding:14px; }
   .area-card { background:#0f1a33; border:1px solid #2b3558; border-radius:12px; padding:10px 12px; }
   .area-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
@@ -34,16 +38,6 @@
   .icard img { width:48px; height:48px; }
   .icard .label { font-weight:600; font-size:13px; }
   .footer { padding:12px 16px; font-size:12px; color:#b9c5d6; opacity:.8; }
-
-  /* Responsivitet: krymp labels på små skjermer, og skjul helt under 480px */
-  @media (max-width: 900px) { .loc-label { font-size:11px; } }
-  @media (max-width: 700px) { .loc-label { font-size:10px; padding:1px 4px; } }
-  @media (max-width: 480px) { .loc-label { display:none; } }
-  #calib-hint {
-    position:absolute; top:8px; left:12px; background:rgba(0,0,0,.6); color:#fff;
-    padding:4px 8px; font-size:12px; border-radius:6px; display:none;
-  }
-  #calib-hint code { color:#9fe; }
 </style>
 </head>
 <body>
@@ -56,7 +50,6 @@
         <label><input type="radio" name="mode" value="plus7"><span>+7 til +9 dager</span></label>
       </div>
       <button id="refresh">Oppdater</button>
-      <button id="toggle-calib" title="Klikk på kartet for å lese prosentkoordinater">Kalibrer plassering</button>
     </div>
   </header>
 
@@ -71,8 +64,7 @@
 
       <div class="mapbox" id="mapbox">
         <img id="map" src="./no.svg" alt="Kart over Norge" />
-        <div id="version-tag">Norgesvarsel v1.9</div>
-        <div id="calib-hint">Klikk et sted på kartet → <code>x:– , y:–</code></div>
+        <div id="version-tag">Norgesvarsel v1.10</div>
         <!-- Pins legges inn av JS -->
       </div>
 
@@ -90,27 +82,78 @@
 const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
 const TZ = "Europe/Oslo";
 
-// === Proxy-oppsett ===
-// allorigins brukes som standard (enkelt). Bytt til egen Worker ved å sette WORKER_URL.
+// === Proxy ===
+// Standard: AllOrigins. Anbefalt: egen Cloudflare Worker – sett WORKER_URL nedenfor.
 const USE_PROXY = true;
-const WORKER_URL = ""; // f.eks. "https://din-worker.workers.dev/?u=" (tom = ikke brukt)
+const WORKER_URL = ""; // f.eks. "https://din-worker.workers.dev/?u=" (tom = bruk AllOrigins)
 
-// 10 områder med Yr-ID + foreløpige posisjoner (% av faktisk bildeareal)
-// Bruk "Kalibrer" og klikk på kartet for å lese riktige x,y. Oppdater verdiene her etter hvert.
+// === Kartprojeksjon ===
+// WebMercator + manuelt valgt geoboks for bildet (fast for fast SVG-kart).
+// Juster ved behov, men dette treffer normalt Norge-kart uten rotasjon.
+const BBOX = {
+  lonMin: 4.0,   // vest (≈ Lista)
+  lonMax: 33.5,  // øst (≈ Kirkenes)
+  latMin: 57.7,  // sør (≈ Skagerrak)
+  latMax: 71.5   // nord (≈ Nordkapp/Sørøya)
+};
+
+function mercY(latDeg) {
+  const lat = Math.max(-85, Math.min(85, latDeg));
+  const rad = lat * Math.PI / 180;
+  return Math.log(Math.tan(Math.PI/4 + rad/2));
+}
+function projectLonLatToUnitXY(lon, lat) {
+  // x: 0..1 fra lonMin..lonMax, y: 0..1 fra latMax..latMin (topp=0)
+  const x = (lon - BBOX.lonMin) / (BBOX.lonMax - BBOX.lonMin);
+  const yTop = mercY(BBOX.latMax), yBot = mercY(BBOX.latMin);
+  const y = (yTop - mercY(lat)) / (yTop - yBot);
+  return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
+}
+function getImageContentRect() {
+  const mapbox = document.getElementById("mapbox");
+  const img = document.getElementById("map");
+  const box = mapbox.getBoundingClientRect();
+  const naturalW = img.naturalWidth || 1000;
+  const naturalH = img.naturalHeight || 1000;
+  const scale = Math.min(box.width / naturalW, box.height / naturalH);
+  const contentW = naturalW * scale;
+  const contentH = naturalH * scale;
+  const offsetX = (box.width  - contentW) / 2;
+  const offsetY = (box.height - contentH) / 2;
+  return { offsetX, offsetY, width: contentW, height: contentH };
+}
+function clearPins() {
+  document.querySelectorAll(".pin, .loc-label").forEach(n => n.remove());
+}
+function addPinByLonLat(name, lon, lat) {
+  const { x, y } = projectLonLatToUnitXY(lon, lat);
+  const { offsetX, offsetY, width, height } = getImageContentRect();
+  const left = offsetX + x * width;
+  const top  = offsetY + y * height;
+
+  const mapbox = document.getElementById("mapbox");
+  const pin = document.createElement("div"); pin.className = "pin";
+  const lab = document.createElement("div"); lab.className = "loc-label"; lab.textContent = name;
+  pin.style.left = left + "px"; pin.style.top = top + "px";
+  lab.style.left = left + "px"; lab.style.top = top + "px";
+  mapbox.appendChild(pin); mapbox.appendChild(lab);
+}
+
+// === Områder (ID til Yr, + lat/lon for plassering) ===
 const AREAS = [
-  { name:"Oslo og østlandsområdet",        id:"1-72837",   x:72, y:82 },
-  { name:"Kristiansand og sørlandet",      id:"1-2376",    x:60, y:94 },
-  { name:"Åndalsnes-området og Romsdalen", id:"1-190429",  x:48, y:70 },
-  { name:"Bergen og vestlandet",           id:"1-92416",   x:38, y:84 },
-  { name:"Bohuslen og Göteborg-området",   id:"2-2693301", x:52, y:90 },
-  { name:"Henningsvær og Lofoten",         id:"1-276748",  x:60, y:40 },
-  { name:"Hemsedal og dalstrøka innafor",  id:"5-25115",   x:56, y:79 },
-  { name:"Jotunheimen (Turtagrø)",         id:"1-162272",  x:50, y:76 },
-  { name:"Trøndelag og Midt-Norge",        id:"1-211102",  x:54, y:62 },
-  { name:"Lillehammer, Hafjell og Sjusjøen", id:"1-143669", x:58, y:83 },
+  { name:"Oslo og østlandsområdet",        id:"1-72837",   lat:59.913, lon:10.739 },
+  { name:"Kristiansand og sørlandet",      id:"1-2376",    lat:58.147, lon:7.996 },
+  { name:"Åndalsnes-området og Romsdalen", id:"1-190429",  lat:62.567, lon:7.688 },
+  { name:"Bergen og vestlandet",           id:"1-92416",   lat:60.393, lon:5.324 },
+  { name:"Bohuslen og Göteborg-området",   id:"2-2693301", lat:57.709, lon:11.975 },
+  { name:"Henningsvær og Lofoten",         id:"1-276748",  lat:68.154, lon:14.210 },
+  { name:"Hemsedal og dalstrøka innafor",  id:"5-25115",   lat:60.862, lon:8.552 },
+  { name:"Jotunheimen (Turtagrø)",         id:"1-162272",  lat:61.498, lon:7.751 },
+  { name:"Trøndelag og Midt-Norge",        id:"1-211102",  lat:63.431, lon:10.395 },
+  { name:"Lillehammer, Hafjell og Sjusjøen", id:"1-143669", lat:61.115, lon:10.466 },
 ];
 
-// --- Tidsverktøy (Europe/Oslo) ---
+// === Tid ===
 const toLocalOslo = (d) => new Date(d.toLocaleString("en-GB", { timeZone: TZ }));
 function localNoon(daysFromToday=0) {
   const now = toLocalOslo(new Date());
@@ -126,7 +169,7 @@ function upcomingWeekendNoons() {
   return [localNoon(daysToFriday), localNoon(daysToFriday+1), localNoon(daysToFriday+2)];
 }
 
-// --- UI-tekst ---
+// === UI-tekst ===
 function setLegend(mode) {
   const t = document.getElementById("legend-title");
   const s = document.getElementById("legend-sub");
@@ -142,88 +185,66 @@ function setLegend(mode) {
   }
 }
 
-// --- Yr API via ID (med valgfri proxy) ---
+// === Yr API (med proxy) ===
 async function fetchById(id) {
   const yrUrl = `https://www.yr.no/api/v0/locations/${id}/forecast`;
   let url = yrUrl;
-
   if (USE_PROXY) {
-    if (WORKER_URL) {
-      url = WORKER_URL + encodeURIComponent(yrUrl);
-    } else {
-      // AllOrigins (enkel, offentlig). OK for testing.
-      url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yrUrl)}`;
-    }
+    url = WORKER_URL
+      ? WORKER_URL + encodeURIComponent(yrUrl)
+      : `https://api.allorigins.win/raw?url=${encodeURIComponent(yrUrl)}`;
   }
-
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Yr API ${res.status}`);
   return res.json();
 }
 
-// --- Finn longInterval som dekker lokal 12:00 for gitt dato ---
+// === Velg long-ikon rundt lokal 12:00 ===
 function pickLongSymbolForDate(forecast, targetLocalNoon) {
   const longs = forecast?.longIntervals || [];
-  if (!longs.length) return { code:null, interval:null };
-
+  if (!longs.length) return { code:null };
   const t = targetLocalNoon.getTime();
   for (const it of longs) {
     const start = new Date(it.start).getTime();
     const end   = new Date(it.end).getTime();
     if (t >= start && t < end) {
       const code = it.symbol || it.symbolCode || it.symbol_code || null;
-      return { code, interval: it };
+      return { code };
     }
   }
-  // Fallback: nærmeste start
+  // fallback: nærmeste start
   let best=null, bestDiff=Infinity;
   for (const it of longs) {
-    const start = new Date(it.start).getTime();
-    const diff = Math.abs(start - t);
+    const diff = Math.abs(new Date(it.start).getTime() - t);
     if (diff < bestDiff) { best = it; bestDiff = diff; }
   }
   const code = best ? (best.symbol || best.symbolCode || best.symbol_code || null) : null;
-  return { code, interval: best };
+  return { code };
 }
 
-// --- Plassering over faktisk bildeareal (object-fit: contain) ---
-function getImageContentRect() {
-  const mapbox = document.getElementById("mapbox");
-  const img = document.getElementById("map");
-  const box = mapbox.getBoundingClientRect();
+// === UI-kort for ikon ===
+function cardForSymbol(dateObj, symbolCode) {
+  const div = document.createElement("div");
+  div.className = "icard";
+  const img = document.createElement("img");
+  const label = document.createElement("div"); label.className = "label";
+  const sub = document.createElement("div"); sub.className = "meta";
+  const dd = dateObj.toLocaleDateString("no-NO", { weekday:"short", day:"2-digit", month:"short", timeZone: TZ });
+  label.textContent = dd;
 
-  const naturalW = img.naturalWidth || 1000;
-  const naturalH = img.naturalHeight || 1000;
-  const scale = Math.min(box.width / naturalW, box.height / naturalH);
-  const contentW = naturalW * scale;
-  const contentH = naturalH * scale;
-  const offsetX = (box.width  - contentW) / 2;
-  const offsetY = (box.height - contentH) / 2;
-
-  return { offsetX, offsetY, width: contentW, height: contentH };
+  if (symbolCode) {
+    img.src = ICON_BASE + symbolCode + ".svg";
+    img.alt = symbolCode.replaceAll("_"," ");
+    sub.textContent = symbolCode;
+  } else {
+    img.alt = "ingen data";
+    sub.textContent = "mangler symbol";
+  }
+  div.appendChild(img); div.appendChild(label); div.appendChild(sub);
+  return div;
 }
 
-function clearPins() {
-  document.querySelectorAll(".pin, .loc-label").forEach(n => n.remove());
-}
-
-function addPin(name, xPercent, yPercent) {
-  const mapbox = document.getElementById("mapbox");
-  const { offsetX, offsetY, width, height } = getImageContentRect();
-
-  const pin = document.createElement("div"); pin.className = "pin";
-  const lab = document.createElement("div"); lab.className = "loc-label"; lab.textContent = name;
-
-  const left = offsetX + (xPercent/100) * width;
-  const top  = offsetY + (yPercent/100) * height;
-
-  pin.style.left = left + "px"; pin.style.top = top + "px";
-  lab.style.left = left + "px"; lab.style.top = top + "px";
-
-  mapbox.appendChild(pin); mapbox.appendChild(lab);
-}
-
-// --- Render ---
+// === Render ===
 async function render() {
   const mode = document.querySelector('input[name="mode"]:checked').value;
   setLegend(mode);
@@ -235,24 +256,22 @@ async function render() {
   if (mode === "weekend") {
     dates = upcomingWeekendNoons();
   } else if (mode === "next3") {
-    if (dow === 5) { dates = [ localNoon(0), localNoon(1), localNoon(2) ]; } // fredag => fre–lør–søn
-    else { dates = [ localNoon(1), localNoon(2), localNoon(3) ]; }
+    dates = (dow === 5) ? [ localNoon(0), localNoon(1), localNoon(2) ] // fredag
+                        : [ localNoon(1), localNoon(2), localNoon(3) ];
   } else {
     dates = [ localNoon(7), localNoon(8), localNoon(9) ];
   }
 
   // Pins
   clearPins();
-  AREAS.forEach(a => addPin(a.name, a.x, a.y));
+  AREAS.forEach(a => addPinByLonLat(a.name, a.lon, a.lat));
 
   // Kort per område
   const areasBox = document.getElementById("areas");
   areasBox.innerHTML = "";
 
   for (const area of AREAS) {
-    const card = document.createElement("div");
-    card.className = "area-card";
-
+    const card = document.createElement("div"); card.className = "area-card";
     const head = document.createElement("div"); head.className = "area-head";
     const nm = document.createElement("div"); nm.className = "area-name"; nm.textContent = area.name;
     const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = `ID: ${area.id}`;
@@ -268,8 +287,7 @@ async function render() {
       });
     } catch (e) {
       const warn = document.createElement("div");
-      warn.className = "meta";
-      warn.style.color = "#ffb4b4";
+      warn.className = "meta"; warn.style.color = "#ffb4b4";
       warn.textContent = `Feil fra Yr: ${e.message}`;
       card.appendChild(head); card.appendChild(warn); areasBox.appendChild(card);
       console.error("Fetch-feil for", area.name, area.id, e);
@@ -282,42 +300,15 @@ async function render() {
   }
 }
 
-// Event-koblinger
+// Events
 document.getElementById("refresh").addEventListener("click", render);
 document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", render));
-window.addEventListener("resize", () => { clearPins(); AREAS.forEach(a => addPin(a.name, a.x, a.y)); });
+window.addEventListener("resize", () => { clearPins(); AREAS.forEach(a => addPinByLonLat(a.name, a.lon, a.lat)); });
 
 // Vent på at kartbildet er lastet før første render
 const mapImg = document.getElementById("map");
 if (!mapImg.complete) mapImg.addEventListener("load", render, { once: true });
 else render();
-
-// === Kalibreringsmodus ===
-let calibrating = false;
-const calibBtn = document.getElementById("toggle-calib");
-const calibHint = document.getElementById("calib-hint");
-
-calibBtn.addEventListener("click", () => {
-  calibrating = !calibrating;
-  calibBtn.textContent = calibrating ? "Avslutt kalibrering" : "Kalibrer plassering";
-  calibHint.style.display = calibrating ? "block" : "none";
-});
-
-document.getElementById("mapbox").addEventListener("click", (ev) => {
-  if (!calibrating) return;
-  const mapbox = document.getElementById("mapbox");
-  const rect = mapbox.getBoundingClientRect();
-  const { offsetX, offsetY, width, height } = getImageContentRect();
-
-  const x = ((ev.clientX - rect.left) - offsetX) / width * 100;
-  const y = ((ev.clientY - rect.top)  - offsetY) / height * 100;
-
-  const xP = Math.max(0, Math.min(100, x));
-  const yP = Math.max(0, Math.min(100, y));
-
-  calibHint.innerHTML = `Klikk et sted på kartet → <code>x:${xP.toFixed(1)} , y:${yP.toFixed(1)}</code>  (lim inn i AREAS)`;
-  console.log("[Kalibrering]", `x:${xP.toFixed(1)} , y:${yP.toFixed(1)}`);
-});
 </script>
 </body>
 </html>
