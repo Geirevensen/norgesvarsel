@@ -19,10 +19,9 @@
   .mapwrap img { width:100%; height:100%; object-fit:contain; display:block; background:linear-gradient(180deg,#0e1b34,#0a1629); }
   .pin { position:absolute; width:12px; height:12px; border-radius:50%; background:var(--accent); border:2px solid #001017; transform:translate(-50%,-50%); box-shadow:0 0 0 4px rgba(91,192,190,.22); }
 
-  /* Panelet med de tre symbolene som "flyter" ved Oslo */
+  /* Triplet-panel */
   .triplet-panel {
     position:absolute;
-    transform: translate(10px, -50%); /* standard: til høyre for pin, vertikalt sentrert */
     background: var(--card);
     border:1px solid #2b3558;
     border-radius: 12px;
@@ -65,7 +64,7 @@
     <img id="mapimg" src="./no.svg" alt="Kart over Norge">
     <div id="pin" class="pin" title="Oslo"></div>
     <div id="panel" class="triplet-panel"></div>
-    <div id="version">v2.0 – Oslo test</div>
+    <div id="version">v2.1 – Oslo test</div>
   </div>
 
 <script>
@@ -73,17 +72,12 @@
 
 /* ----------------- Konfig ----------------- */
 const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
-const OSLO = { lat: 59.913, lon: 10.739 }; // sentrum
-const TZ = "Europe/Oslo";
+const OSLO = { lat: 59.913, lon: 10.739 };
 
 /* ----------------- Tid ----------------- */
-function localNoonNDaysFromNow(n){
-  const d=new Date(); d.setDate(d.getDate()+n); d.setHours(12,0,0,0); return d;
-}
-function upcomingWeekendNoons(){
-  const now=new Date(); const dow=now.getDay(); const df=(5-dow+7)%7;
-  return [localNoonNDaysFromNow(df), localNoonNDaysFromNow(df+1), localNoonNDaysFromNow(df+2)];
-}
+function localNoonNDaysFromNow(n){ const d=new Date(); d.setDate(d.getDate()+n); d.setHours(12,0,0,0); return d; }
+function upcomingWeekendNoons(){ const now=new Date(); const dow=now.getDay(); const df=(5-dow+7)%7;
+  return [localNoonNDaysFromNow(df), localNoonNDaysFromNow(df+1), localNoonNDaysFromNow(df+2)]; }
 
 /* ---------- MET compact (symbol_code) ---------- */
 async function fetchMet(lat, lon){
@@ -110,14 +104,9 @@ function pickSymbolCodeAtLocalNoon(metForecast, dateObj){
       || null;
 }
 
-/* -------- Kart-projeksjon (WebMercator) --------
-   Kalibrert bbox for et typisk Norge-SVG uten rotasjon.
-   Juster smått hvis pinnen er litt off. */
+/* -------- Kart-projeksjon (WebMercator) -------- */
 const BBOX = { lonMin: 4.4, lonMax: 33.7, latMin: 57.9, latMax: 71.6 };
-function mercY(lat){
-  const r = Math.max(-85, Math.min(85, lat)) * Math.PI/180;
-  return Math.log(Math.tan(Math.PI/4 + r/2));
-}
+function mercY(lat){ const r = Math.max(-85, Math.min(85, lat))*Math.PI/180; return Math.log(Math.tan(Math.PI/4 + r/2)); }
 function projectLonLatToUnitXY(lon, lat){
   const x = (lon - BBOX.lonMin) / (BBOX.lonMax - BBOX.lonMin);
   const yTop = mercY(BBOX.latMax), yBot = mercY(BBOX.latMin);
@@ -135,7 +124,7 @@ function getImageContentRect(){
   return { offsetX:ox, offsetY:oy, width:cw, height:ch, boxW:box.width, boxH:box.height };
 }
 
-/* ------- Plassering av pin + panel ------- */
+/* ------- Plassering av pin + panel (med clamping) ------- */
 function placeAt(lon, lat){
   const { x, y } = projectLonLatToUnitXY(lon, lat);
   const { offsetX, offsetY, width, height, boxW, boxH } = getImageContentRect();
@@ -147,23 +136,23 @@ function placeAt(lon, lat){
   pin.style.top  = py + "px";
 
   const panel = document.getElementById("panel");
-  // standard: panel til høyre for pin
-  panel.style.left = px + "px";
-  panel.style.top  = py + "px";
-  panel.style.transform = "translate(10px, -50%)"; // høyre, vertikalt sentrert
+  // 1) ønsket posisjon: ved siden av pin (til høyre, vertikalt sentrert)
+  //    men uten transform-triks, vi setter faktiske left/top.
+  //    Vi må vite panelstørrelsen → sett midlertidig posisjon, mål, og så clamp.
+  panel.style.left = (px + 10) + "px";
+  panel.style.top  = (py - 10000) + "px"; // langt opp for å unngå feil scroll mens vi måler
+  const r = panel.getBoundingClientRect();
 
-  // hvis det ikke er plass til høyre → flytt til venstre
-  const panelRect = panel.getBoundingClientRect();
-  const expectedRight = px + 10 + panelRect.width;
-  if (expectedRight > boxW - 8) {
-    panel.style.transform = `translate(${-10 - panelRect.width}px, -50%)`;
-  }
-  // hvis panelet går utenfor topp/bunn → knytt til ovenfor pin
-  if (py - panelRect.height/2 < 8) {
-    panel.style.transform += " translate(0px, " + (8 - (py - panelRect.height/2)) + "px)";
-  } else if (py + panelRect.height/2 > boxH - 8) {
-    panel.style.transform += " translate(0px, " + ((boxH - 8) - (py + panelRect.height/2)) + "px)";
-  }
+  let left = px + 10;                  // til høyre for pin
+  let top  = py - r.height/2;          // vertikalt sentrert
+
+  // 2) clamp innenfor kartflaten (8px margin)
+  const M = 8;
+  left = Math.min(Math.max(left, M), boxW - M - r.width);
+  top  = Math.min(Math.max(top,  M), boxH - M - r.height);
+
+  panel.style.left = left + "px";
+  panel.style.top  = top  + "px";
 }
 
 /* ------------- UI-kort ------------- */
@@ -183,10 +172,9 @@ function card(dateObj, code){
 
 /* ------------- Render ------------- */
 async function render(){
-  // plasser pin + panel først (så vi har størrelse til bounds-sjekk)
+  // plassér pin + panel “foreløpig” for måling
   placeAt(OSLO.lon, OSLO.lat);
 
-  // datoer
   const mode = document.querySelector('input[name="mode"]:checked').value;
   const now = new Date(), dow = now.getDay();
   const dates = mode==="weekend" ? upcomingWeekendNoons()
@@ -194,21 +182,17 @@ async function render(){
                                          : [localNoonNDaysFromNow(1),localNoonNDaysFromNow(2),localNoonNDaysFromNow(3)])
                                   : [localNoonNDaysFromNow(7),localNoonNDaysFromNow(8),localNoonNDaysFromNow(9)];
 
-  // hent symbol_code og vis
   const panel = document.getElementById("panel");
   panel.innerHTML = "";
   try{
     const met = await fetchMet(OSLO.lat, OSLO.lon);
-    dates.forEach(d => {
-      const code = pickSymbolCodeAtLocalNoon(met, d);
-      panel.appendChild(card(d, code));
-    });
+    dates.forEach(d => panel.appendChild(card(d, pickSymbolCodeAtLocalNoon(met, d))));
   }catch(e){
     panel.innerHTML = `<div class="meta" style="color:#ffb4b4">Feil: ${e.message}</div>`;
     console.error(e);
   }
 
-  // re-posisjoner etter at panelens bredde er kjent (for kant-sjekk)
+  // re-plassér med korrekt panelbredde/høyde og clamp
   placeAt(OSLO.lon, OSLO.lat);
 }
 
