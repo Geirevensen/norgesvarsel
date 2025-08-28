@@ -17,7 +17,7 @@
   button { background:#111a2f; color:var(--fg); border:1px solid #2b3558; padding:8px 10px; border-radius:8px; cursor:pointer; }
   .panel { background:var(--card); border:1px solid #2b3558; border-radius:14px; padding:14px; }
   .legend { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; }
-  .legend small { color:var(--muted); }
+  .legend small { color:#9fb3c8; }
   .triplet { display:flex; gap:14px; flex-wrap:wrap; }
   .icard { width:110px; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; padding:10px; display:flex; flex-direction:column; align-items:center; gap:6px; }
   .icard img { width:56px; height:56px; }
@@ -43,17 +43,16 @@
     <div class="legend">
       <div>
         <strong id="legend-title">Førstkommende helg</strong><br>
-        <small id="legend-sub">Symboler rundt kl. 12 lokal tid (Europe/Oslo)</small>
+        <small id="legend-sub">Symboler rundt kl. 12 (lokal tid)</small>
       </div>
-      <div class="meta">Kilde: yr.no locations/ID/forecast → longIntervals</div>
+      <div class="meta">Kilde: yr.no /api/v0/locations/<code>1-72837</code>/forecast</div>
     </div>
 
     <div id="box" class="triplet"></div>
-
     <div id="error" class="meta err" style="display:none;"></div>
 
     <div class="footer">
-      <div>Test v1.0-ID • Oslo ID: <code>1-72837</code></div>
+      <div>Test v1.1-ID • Oslo ID: <code>1-72837</code></div>
       <div>Ikoner: MET weathericons (SVG)</div>
     </div>
   </div>
@@ -64,43 +63,26 @@
 
 // ===== Konfig =====
 const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
-const TZ = "Europe/Oslo";
 const OSLO_ID = "1-72837";
 
-// CORS: bruk enkel proxy nå (AllOrigins). Anbefalt senere: egen Cloudflare Worker.
+// CORS: enkel proxy nå (AllOrigins). For produksjon anbefaler jeg egen Cloudflare Worker.
 const USE_PROXY = true;
-const WORKER_URL = ""; // f.eks. "https://din-worker.workers.dev/?u=" (tom = bruk AllOrigins)
+const WORKER_URL = ""; // fyll inn "https://din-worker.workers.dev/?u=" hvis du lager Worker
 
-// ===== Tid =====
-const toLocalOslo = (d) => new Date(d.toLocaleString("en-GB", { timeZone: TZ }));
-function localNoon(daysFromToday=0) {
-  const now = toLocalOslo(new Date());
-  const t = new Date(now);
-  t.setDate(now.getDate() + daysFromToday);
-  t.setHours(12,0,0,0);
-  return t;
+// ===== Tidsvalg (bruker vanlig lokal tid – robust) =====
+function localNoonNDaysFromNow(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  d.setHours(12,0,0,0);
+  return d;
 }
 function upcomingWeekendNoons() {
-  const now = toLocalOslo(new Date());
+  const now = new Date();
   const dow = now.getDay(); // 0=Sun ... 6=Sat
   const daysToFriday = (5 - dow + 7) % 7;
-  return [localNoon(daysToFriday), localNoon(daysToFriday+1), localNoon(daysToFriday+2)];
-}
-
-// ===== UI-tekst =====
-function setLegend(mode) {
-  const t = document.getElementById("legend-title");
-  const s = document.getElementById("legend-sub");
-  if (mode === "weekend") {
-    t.textContent = "Førstkommende helg";
-    s.textContent = "Symboler rundt kl. 12 for fre–søn (Europe/Oslo)";
-  } else if (mode === "next3") {
-    t.textContent = "Neste 3 dager";
-    s.textContent = "Symboler rundt kl. 12 lokal tid";
-  } else {
-    t.textContent = "+7 til +9 dager";
-    s.textContent = "Symboler rundt kl. 12 lokal tid";
-  }
+  return [localNoonNDaysFromNow(daysToFriday),
+          localNoonNDaysFromNow(daysToFriday+1),
+          localNoonNDaysFromNow(daysToFriday+2)];
 }
 
 // ===== Yr API (ID) =====
@@ -117,28 +99,37 @@ async function fetchById(id) {
   return res.json();
 }
 
-// Finn longInterval-symbol som dekker lokal 12:00 på valgt dato
-function pickLongSymbolForDate(forecast, targetLocalNoon) {
-  const longs = forecast?.longIntervals || [];
-  if (!longs.length) return { code:null };
-  const t = targetLocalNoon.getTime();
+// --- Velg symbol (foretrekker longIntervals; fallback til shortIntervals) ---
+function pickFromIntervals(arr, targetMs) {
+  if (!arr || !arr.length) return null;
 
-  for (const it of longs) {
-    const start = new Date(it.start).getTime();
-    const end   = new Date(it.end).getTime();
-    if (t >= start && t < end) {
-      const code = it.symbol || it.symbolCode || it.symbol_code || null;
-      return { code };
+  // 1) Finn intervall som dekker t
+  for (const it of arr) {
+    const start = Date.parse(it.start);
+    const end   = Date.parse(it.end);
+    if (isFinite(start) && isFinite(end) && targetMs >= start && targetMs < end) {
+      return it.symbol || it.symbolCode || it.symbol_code || null;
     }
   }
-  // fallback: nærmeste start
+  // 2) Fallback: nærmeste start
   let best=null, bestDiff=Infinity;
-  for (const it of longs) {
-    const diff = Math.abs(new Date(it.start).getTime() - t);
+  for (const it of arr) {
+    const start = Date.parse(it.start);
+    if (!isFinite(start)) continue;
+    const diff = Math.abs(start - targetMs);
     if (diff < bestDiff) { best = it; bestDiff = diff; }
   }
-  const code = best ? (best.symbol || best.symbolCode || best.symbol_code || null) : null;
-  return { code };
+  return best ? (best.symbol || best.symbolCode || best.symbol_code || null) : null;
+}
+
+function pickSymbolForDate(forecast, targetDate) {
+  const t = targetDate.getTime();
+  // longIntervals (dag/natt)
+  let code = pickFromIntervals(forecast.longIntervals, t);
+  if (code) return code;
+  // shortIntervals (timevise, ~90 t frem)
+  code = pickFromIntervals(forecast.shortIntervals, t);
+  return code || null;
 }
 
 // ===== UI-kort =====
@@ -149,7 +140,7 @@ function cardForSymbol(dateObj, symbolCode) {
   const label = document.createElement("div"); label.className = "label";
   const sub = document.createElement("div"); sub.className = "meta";
 
-  const dd = dateObj.toLocaleDateString("no-NO", { weekday:"short", day:"2-digit", month:"short", timeZone: TZ });
+  const dd = dateObj.toLocaleDateString("no-NO", { weekday:"short", day:"2-digit", month:"short" });
   label.textContent = dd;
 
   if (symbolCode) {
@@ -164,31 +155,39 @@ function cardForSymbol(dateObj, symbolCode) {
   return div;
 }
 
-// ===== Render (1 sted: Oslo) =====
+// ===== Render (Oslo) =====
 async function render() {
   const mode = document.querySelector('input[name="mode"]:checked').value;
-  setLegend(mode);
+  const t = document.getElementById("legend-title");
+  const s = document.getElementById("legend-sub");
+  if (mode === "weekend") { t.textContent = "Førstkommende helg"; s.textContent = "Symboler rundt kl. 12 (fre–søn)"; }
+  else if (mode === "next3") { t.textContent = "Neste 3 dager"; s.textContent = "Symboler rundt kl. 12 lokal tid"; }
+  else { t.textContent = "+7 til +9 dager"; s.textContent = "Symboler rundt kl. 12 lokal tid"; }
+
   const box = document.getElementById("box");
   const err = document.getElementById("error");
   box.innerHTML = ""; err.style.display = "none"; err.textContent = "";
 
-  // Datoer
-  const now = toLocalOslo(new Date());
-  const dow = now.getDay();
   let dates = [];
+  const now = new Date();
+  const dow = now.getDay();
   if (mode === "weekend") {
-    dates = upcomingWeekendNoons(); // fre–søn
+    dates = upcomingWeekendNoons();
   } else if (mode === "next3") {
-    dates = (dow === 5) ? [ localNoon(0), localNoon(1), localNoon(2) ] // fredag
-                        : [ localNoon(1), localNoon(2), localNoon(3) ];
+    dates = (dow === 5) ? [ localNoonNDaysFromNow(0), localNoonNDaysFromNow(1), localNoonNDaysFromNow(2) ]
+                        : [ localNoonNDaysFromNow(1), localNoonNDaysFromNow(2), localNoonNDaysFromNow(3) ];
   } else {
-    dates = [ localNoon(7), localNoon(8), localNoon(9) ];
+    dates = [ localNoonNDaysFromNow(7), localNoonNDaysFromNow(8), localNoonNDaysFromNow(9) ];
   }
 
   try {
     const forecast = await fetchById(OSLO_ID);
+    // Hjelpedebug om strukturen er annerledes
+    if (!forecast.longIntervals && !forecast.shortIntervals) {
+      console.warn("Uventet JSON fra Yr:", forecast);
+    }
     dates.forEach(d => {
-      const { code } = pickLongSymbolForDate(forecast, d);
+      const code = pickSymbolForDate(forecast, d);
       box.appendChild(cardForSymbol(d, code));
     });
   } catch (e) {
