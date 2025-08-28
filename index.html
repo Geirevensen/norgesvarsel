@@ -3,70 +3,47 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Norge-vær (MVP)</title>
+  <title>Norgesvarsel</title>
   <style>
-    .mapbox img { width: 100%; height: 100%; object-fit: contain; display: block; }
     :root { --bg:#0b132b; --fg:#eef; --muted:#9fb3c8; --card:#1c2541; --accent:#5bc0be; }
     body { margin:0; font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--fg); }
     header { padding:16px 20px; border-bottom:1px solid #223; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
     header h1 { font-size:18px; margin:0 10px 0 0; color:#fff; }
     .controls { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-    .controls label { opacity:.9; }
-    select, button { background:#111a2f; color:var(--fg); border:1px solid #2b3558; padding:8px 10px; border-radius:8px; }
     .seg { display:flex; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; overflow:hidden; }
     .seg label { padding:8px 12px; cursor:pointer; color:var(--muted); }
     .seg input { display:none; }
     .seg input:checked + span { background:var(--accent); color:#001017; }
     .wrap { display:grid; grid-template-columns: 1fr; gap:12px; padding:14px; }
     .panel { background:var(--card); border:1px solid #2b3558; border-radius:14px; overflow:hidden; }
-    .mapbox { position:relative; min-height:60vh; }
-    .mapbox svg { width:100%; height:100%; display:block; background:linear-gradient(180deg,#0e1b34,#0a1629); }
     .legend { display:flex; align-items:center; gap:16px; padding:12px 14px; border-bottom:1px solid #2b3558; }
     .legend small { color:var(--muted); }
-    .icons { display:flex; gap:18px; padding:14px; flex-wrap:wrap; }
-    .icard { display:flex; flex-direction:column; align-items:center; gap:6px; background:#0f1a33; border:1px solid #2b3558; border-radius:12px; padding:10px 12px; width:120px; }
-    .icard img { width:64px; height:64px; }
-    .icard .label { font-weight:600; }
-    .notice { color:#c6d8ff; font-size:13px; opacity:.9; padding:0 14px 14px; }
-    .footer { padding:12px 16px; font-size:12px; color:#b9c5d6; opacity:.8; }
+    .mapbox { position:relative; min-height:60vh; }
+    .mapbox img { width:100%; height:100%; object-fit:contain; display:block; }
     .pin { position:absolute; width:12px; height:12px; border-radius:50%; background:var(--accent); border:2px solid #001017; transform:translate(-50%,-50%); box-shadow:0 0 0 4px rgba(91,192,190,.2); }
-    .loc-label { position:absolute; transform:translate(-50%,10px); color:#fff; font-size:12px; background:rgba(0,0,0,.35); padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.15);}
-    .help { color:#a8bed9; }
-    a { color:#8ed7ff; }
-    #version-tag {
-      position: absolute;
-      bottom: 8px;
-      right: 12px;
-      background: rgba(0,0,0,0.6);
-      color: #fff;
-      padding: 4px 8px;
-      font-size: 12px;
-      border-radius: 6px;
-      pointer-events: none; /* så den ikke fanger klikk */
-    }
-
+    .loc-label { position:absolute; transform:translate(-50%,10px); color:#fff; font-size:12px; background:rgba(0,0,0,.35); padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.15); white-space:nowrap; }
+    #version-tag { position:absolute; bottom:8px; right:12px; background:rgba(0,0,0,.6); color:#fff; padding:4px 8px; font-size:12px; border-radius:6px; pointer-events:none; }
+    .areas { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:14px; padding:14px; }
+    .area-card { background:#0f1a33; border:1px solid #2b3558; border-radius:12px; padding:10px 12px; }
+    .area-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .area-name { font-weight:700; }
+    .meta { font-size:11px; color:#9fb3c8; }
+    .triplet { display:flex; gap:14px; }
+    .icard { display:flex; flex-direction:column; align-items:center; gap:6px; background:#0f1a33; border:1px solid #2b3558; border-radius:10px; padding:8px 10px; width:90px; }
+    .icard img { width:48px; height:48px; }
+    .icard .label { font-weight:600; font-size:13px; }
+    .footer { padding:12px 16px; font-size:12px; color:#b9c5d6; opacity:.8; }
   </style>
 </head>
 <body>
   <header>
-    <h1>🇳🇴 Norge-vær</h1>
+    <h1>🇳🇴 Norgesvarsel</h1>
     <div class="controls">
-      <label for="place">Sted:</label>
-      <select id="place">
-        <option value="59.9133,10.7389,Oslo">Oslo</option>
-        <option value="60.39299,5.32415,Bergen">Bergen</option>
-        <option value="63.4305,10.3951,Trondheim">Trondheim</option>
-        <option value="69.6492,18.9553,Tromsø">Tromsø</option>
-        <option value="58.96998,5.73311,Stavanger">Stavanger</option>
-        <option value="67.2828,14.4049,Bodø">Bodø</option>
-      </select>
-
       <div class="seg" role="tablist" aria-label="Visning">
-        <label><input type="radio" name="mode" value="next3" checked><span>Neste 3 dager</span></label>
-        <label><input type="radio" name="mode" value="weekend"><span>Førstkommende helg</span></label>
+        <label><input type="radio" name="mode" value="weekend" checked><span>Førstkommende helg</span></label>
+        <label><input type="radio" name="mode" value="next3"><span>Neste 3 dager</span></label>
         <label><input type="radio" name="mode" value="plus7"><span>+7 til +9 dager</span></label>
       </div>
-
       <button id="refresh">Oppdater</button>
     </div>
   </header>
@@ -74,49 +51,62 @@
   <div class="wrap">
     <div class="panel">
       <div class="legend">
-        <div><strong id="legend-title">Neste 3 dager</strong><br><small id="legend-sub">Symboler cirka kl. 12:00 lokal tid (Europe/Oslo)</small></div>
-        <div class="help">• Klikk «Oppdater» etter å ha endret valg</div>
+        <div>
+          <strong id="legend-title">Førstkommende helg</strong><br>
+          <small id="legend-sub">Symboler rundt lunsjtid for fredag–søndag (Europe/Oslo)</small>
+        </div>
       </div>
+
       <div class="mapbox" id="mapbox">
-        <!-- Skalerbart Norges-kart -->
-          <img id="map" src="./no.svg" alt="Kart over Norge" />
+        <img id="map" src="./no.svg" alt="Kart over Norge" />
         <div id="version-tag">Norgesvarsel v1.5</div>
-        <div id="pin" class="pin" style="left: 55%; top: 85%;" title="Valgt sted"></div>
-        <div id="pinlabel" class="loc-label" style="left: 55%; top: 85%;">Oslo</div>
+        <!-- Pins legges inn av JS -->
       </div>
-      <div class="icons" id="icons"></div>
-      <div class="notice">
-        Ikoner er MET/yr sine offisielle værikoner (SVG) og mappes direkte fra <code>symbol_code</code> i Locationforecast 2.0.
-        Kilden er MET Norway / yr. Husk egen <code>User-Agent</code> i API-kallet.
+
+      <div id="areas" class="areas"></div>
+
+      <div class="footer">
+        Data: © MET Norway / yr (Forecast v0, locations/{id}/forecast). Ikoner: MET weathericons (SVG).
       </div>
-    </div>
-    <div class="footer">
-      Data: © MET Norway / yr (Locationforecast 2.0). Ikoner: MET weathericons (SVG). Denne siden er en enkel demonstrator.
     </div>
   </div>
 
 <script>
   // ===== KONFIG =====
-  const USER_AGENT = "Geir Evensen / geirevensen@hotmail.com / privat vær-demo";
   const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
   const TZ = "Europe/Oslo";
 
-  // Dine 10 områder med ID
-  // NB: To duplikat-par som nevnt i svaret.
+  // 10 områder med Yr-ID + ca. posisjon i prosent av kartets boks (finjustér ved behov)
   const AREAS = [
-    { name:"Oslo og østlandsområdet",        id:"1-72837",   x:56, y:86 },
-    { name:"Kristiansand og sørlandet",      id:"1-2376",    x:50, y:96 },
-    { name:"Åndalsnes-området og Romsdalen", id:"1-190429",  x:49, y:72 },
-    { name:"Bergen og vestlandet",           id:"1-92416",   x:40, y:86 },
-    { name:"Bohuslen og Göteborg-området",   id:"2-2693301", x:34, y:93 },
-    { name:"Henningsvær og Lofoten",         id:"1-276748",  x:62, y:41 },
-    { name:"Hemsedal og dalstrøka innafor",  id:"5-25115",   x:52, y:84 },  
-    { name:"Jotunheimen (Turtagrø)",         id:"1-162272",  x:48, y:79 },  
-    { name:"Trøndelag og Midt-Norge",        id:"1-211102",   x:55, y:64 },  
-    { name:"Lillehammer, Hafjell og Sjusjøen", id:"1-143669", x:57, y:88 }, 
+    { name:"Oslo og østlandsområdet",        id:"1-72837",   x:72, y:82 },
+    { name:"Kristiansand og sørlandet",      id:"1-2376",    x:60, y:94 },
+    { name:"Åndalsnes-området og Romsdalen", id:"1-190429",  x:48, y:70 },
+    { name:"Bergen og vestlandet",           id:"1-92416",   x:38, y:84 },
+    { name:"Bohuslen og Göteborg-området",   id:"2-2693301", x:52, y:90 },
+    { name:"Henningsvær og Lofoten",         id:"1-276748",  x:60, y:40 },
+    { name:"Hemsedal og dalstrøka innafor",  id:"5-25115",   x:56, y:79 },
+    { name:"Jotunheimen (Turtagrø)",         id:"1-162272",  x:50, y:76 },
+    { name:"Trøndelag og Midt-Norge",        id:"1-211102",  x:54, y:62 },
+    { name:"Lillehammer, Hafjell og Sjusjøen", id:"1-143669", x:58, y:83 },
   ];
 
-  // Visningsmodus
+  // --- Tidsverktøy (Europe/Oslo) ---
+  const toLocalOslo = (d) => new Date(d.toLocaleString("en-GB", { timeZone: TZ }));
+  function localNoon(daysFromToday=0) {
+    const now = toLocalOslo(new Date());
+    const t = new Date(now);
+    t.setDate(now.getDate() + daysFromToday);
+    t.setHours(12,0,0,0);
+    return t;
+  }
+  function upcomingWeekendNoons() {
+    const now = toLocalOslo(new Date());
+    const dow = now.getDay(); // 0=Sun ... 6=Sat
+    const daysToFriday = (5 - dow + 7) % 7;
+    return [localNoon(daysToFriday), localNoon(daysToFriday+1), localNoon(daysToFriday+2)];
+  }
+
+  // --- UI-tekst ---
   function setLegend(mode) {
     const t = document.getElementById("legend-title");
     const s = document.getElementById("legend-sub");
@@ -131,120 +121,47 @@
       s.textContent = "Symboler ca. kl. 12:00 lokal tid";
     }
   }
-// --- Midlertidig: klikk på kartet for å få prosent-koordinater ---
-document.getElementById("mapbox").addEventListener("click", (ev) => {
-  const r = ev.currentTarget.getBoundingClientRect();
-  const xPct = ((ev.clientX - r.left) / r.width) * 100;
-  const yPct = ((ev.clientY - r.top)  / r.height) * 100;
-  const msg = `x:${xPct.toFixed(1)} , y:${yPct.toFixed(1)}`;
-  console.log("[Kart-klikk]", msg);
-  // valgfritt: vis på skjermen
-  let hint = document.getElementById("clickhint");
-  if (!hint) {
-    hint = Object.assign(document.createElement("div"), { id:"clickhint" });
-    hint.style.cssText = "position:fixed;bottom:10px;left:10px;background:#0008;color:#fff;padding:6px 8px;border-radius:8px;font:12px system-ui;z-index:9";
-    document.body.appendChild(hint);
-  }
-  hint.textContent = "Kart-koordinater " + msg + "  (lim inn i AREAS)";
-});
 
-  // Tidshjelpere (Europe/Oslo)
-  const toLocalOslo = (d) => new Date(d.toLocaleString("en-GB", { timeZone: TZ }));
-  function localNoon(daysFromToday=0) {
-    const now = toLocalOslo(new Date());
-    const t = new Date(now);
-    t.setDate(now.getDate() + daysFromToday);
-    t.setHours(12,0,0,0);
-    return t;
-  }
-  function upcomingWeekendNoons() {
-    const now = toLocalOslo(new Date());
-    const dow = now.getDay(); // 0=Sun ... 5=Fri 6=Sat
-    const daysToFriday = (5 - dow + 7) % 7;
-    return [localNoon(daysToFriday), localNoon(daysToFriday+1), localNoon(daysToFriday+2)];
-  }
-
-  // Yr API via ID
+  // --- Yr API via ID (NB: ikke prøv å sette User-Agent i browser) ---
   async function fetchById(id) {
     const url = `https://www.yr.no/api/v0/locations/${id}/forecast`;
-    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    const res = await fetch(url); // uten UA-header i browser
     if (!res.ok) throw new Error(`Yr API ${res.status}`);
     return res.json();
   }
 
-  // Finn passende longInterval-symbol som dekker lokal 12:00 gitt dato
+  // --- Finn longInterval som dekker lokal 12:00 for gitt dato ---
   function pickLongSymbolForDate(forecast, targetLocalNoon) {
     const longs = forecast?.longIntervals || [];
     if (!longs.length) return { code:null, interval:null };
-    con
 
-  // Tidsverktøy – alltid Europe/Oslo
-  const TZ = "Europe/Oslo";
-  const toLocalOslo = (d) => new Date(d.toLocaleString("en-GB", { timeZone: TZ }));
-
-  function localNoon(daysFromToday=0) {
-    const now = toLocalOslo(new Date());
-    const target = new Date(now);
-    target.setDate(now.getDate() + daysFromToday);
-    target.setHours(12,0,0,0);
-    return target;
-  }
-
-  function upcomingWeekendNoons() {
-    // Finn førstkommende fredag, lørdag, søndag (Europe/Oslo)
-    const now = toLocalOslo(new Date());
-    const dow = now.getDay(); // 0=Sun ... 5=Fri 6=Sat
-    const daysToFriday = (5 - dow + 7) % 7;
-    const fri = localNoon(daysToFriday);
-    const lør = localNoon(daysToFriday + 1);
-    const søn = localNoon(daysToFriday + 2);
-    return [fri, lør, søn];
-  }
-
-  // Hent forecast
-  async function fetchForecast(lat, lon, altitude=null) {
-    const params = new URLSearchParams({ lat, lon });
-    if (altitude != null) params.set("altitude", altitude);
-    const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?${params.toString()}`;
-    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
-    if (!res.ok) throw new Error(`MET API ${res.status}`);
-    return res.json();
-  }
-
-  // Velg symbol for nærmeste tidsstempel rundt lokal 12:00.
-  function pickSymbolForDate(forecast, targetLocalNoon) {
-    const timeseries = forecast.properties?.timeseries || [];
-    // Finn nærmeste tidspunkt i timeserien til targetLocalNoon
-    let best = null, bestDiff = Infinity;
-    const targetISO = targetLocalNoon.toISOString().slice(0,19); // jämför uten ms
-    const targetTime = targetLocalNoon.getTime();
-
-    for (const t of timeseries) {
-      const when = new Date(t.time).getTime();
-      const diff = Math.abs(when - targetTime);
-      if (diff < bestDiff) { best = t; bestDiff = diff; }
+    const t = targetLocalNoon.getTime();
+    for (const it of longs) {
+      const start = new Date(it.start).getTime();
+      const end   = new Date(it.end).getTime();
+      if (t >= start && t < end) {
+        const code = it.symbol || it.symbolCode || it.symbol_code || null;
+        return { code, interval: it };
+      }
     }
-    if (!best) return { code: null, at: null };
-
-    // Foretrekk next_6_hours.symbol_code, ellers next_1_hours, ellers next_12_hours
-    const details = best.data || {};
-    let code = details.next_6_hours?.summary?.symbol_code
-            || details.next_1_hours?.summary?.symbol_code
-            || details.next_12_hours?.summary?.symbol_code
-            || null;
-    return { code, at: best.time };
+    // Fallback: nærmeste start
+    let best=null, bestDiff=Infinity;
+    for (const it of longs) {
+      const start = new Date(it.start).getTime();
+      const diff = Math.abs(start - t);
+      if (diff < bestDiff) { best = it; bestDiff = diff; }
+    }
+    const code = best ? (best.symbol || best.symbolCode || best.symbol_code || null) : null;
+    return { code, interval: best };
   }
 
-  // Lag kort for ett symbol
-  function cardForSymbol(dateObj, symbolCode, whenISO) {
+  // --- Kort for ett symbol ---
+  function cardForSymbol(dateObj, symbolCode) {
     const div = document.createElement("div");
     div.className = "icard";
     const img = document.createElement("img");
-    const label = document.createElement("div");
-    label.className = "label";
-    const sub = document.createElement("div");
-    sub.style.color = "#a9bfd7";
-    sub.style.fontSize = "12px";
+    const label = document.createElement("div"); label.className = "label";
+    const sub = document.createElement("div"); sub.className = "meta";
 
     const dd = dateObj.toLocaleDateString("no-NO", { weekday:"short", day:"2-digit", month:"short", timeZone: TZ });
     label.textContent = dd;
@@ -257,87 +174,34 @@ document.getElementById("mapbox").addEventListener("click", (ev) => {
       img.alt = "ingen data";
       sub.textContent = "mangler symbol";
     }
-
-    div.appendChild(img);
-    div.appendChild(label);
-    div.appendChild(sub);
+    div.appendChild(img); div.appendChild(label); div.appendChild(sub);
     return div;
   }
 
-  function setPinLabel(name) {
-    document.getElementById("pinlabel").textContent = name;
+  // --- Pins på kartet ---
+  function clearPins() {
+    document.querySelectorAll(".pin, .loc-label").forEach(n => n.remove());
+  }
+  function addPin(name, xPercent, yPercent) {
+    const mapbox = document.getElementById("mapbox");
+    const pin = document.createElement("div"); pin.className = "pin";
+    const lab = document.createElement("div"); lab.className = "loc-label"; lab.textContent = name;
+
+    const rect = mapbox.getBoundingClientRect();
+    const left = (xPercent/100) * rect.width;
+    const top  = (yPercent/100) * rect.height;
+    pin.style.left = left + "px"; pin.style.top = top + "px";
+    lab.style.left = left + "px"; lab.style.top = top + "px";
+
+    mapbox.appendChild(pin); mapbox.appendChild(lab);
   }
 
-  function setPinPositionForDemo(name) {
-    // Siden vi ikke kjenner koordinatsystemet til din innlimte SVG, plasserer vi markøren omtrent:
-    const map = document.getElementById("mapbox");
-    const pin = document.getElementById("pin");
-    const lab = document.getElementById("pinlabel");
-    const pos = {
-      "Oslo": [0.55, 0.85],
-      "Bergen": [0.38, 0.86],
-      "Trondheim": [0.54, 0.62],
-      "Tromsø": [0.68, 0.26],
-      "Stavanger": [0.35, 0.92],
-      "Bodø": [0.60, 0.45],
-    };
-    const [x,y] = (pos[name] || [0.55,0.85]);
-    const rect = map.getBoundingClientRect();
-    const left = x * rect.width;
-    const top = y * rect.height;
-    pin.style.left = left + "px";
-    pin.style.top = top + "px";
-    lab.style.left = left + "px";
-    lab.style.top = top + "px";
-  }
-
+  // --- Render hele siden ---
   async function render() {
-    const mode = modeRadio();
+    const mode = document.querySelector('input[name="mode"]:checked').value;
     setLegend(mode);
 
-    const [latStr, lonStr, name] = document.getElementById("place").value.split(",");
-    const lat = parseFloat(latStr), lon = parseFloat(lonStr);
-
-    setPinLabel(name);
-    setPinPositionForDemo(name);
-
-    document.getElementById("icons").innerHTML = "";
-
     let dates = [];
-    if (mode === "next3") {
-      dates = [localNoon(1), localNoon(2), localNoon(3)];
-    } else if (mode === "weekend") {
-      dates = upcomingWeekendNoons(); // fredag–søndag
-    } else {
-      dates = [localNoon(7), localNoon(8), localNoon(9)];
-    }
-
-    let forecast;
-    try {
-      forecast = await fetchForecast(lat, lon);
-    } catch (e) {
-      const box = document.getElementById("icons");
-      const err = document.createElement("div");
-      err.className = "notice";
-      err.innerHTML = `Kunne ikke hente data fra MET: <b>${e.message}</b>. 
-      Sjekk at du har satt en egen <code>User-Agent</code> i koden.`;
-      box.appendChild(err);
-      return;
-    }
-
-    const box = document.getElementById("icons");
-    dates.forEach(d => {
-      const { code, at } = pickSymbolForDate(forecast, d);
-      box.appendChild(cardForSymbol(d, code, at));
-    });
-  }
-
-  document.getElementById("refresh").addEventListener("click", render);
-  document.getElementById("place").addEventListener("change", render);
-  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", render));
-
-  // Første kjøring
-  render();
-</script>
-</body>
-</html>
+    if (mode === "weekend") {
+      dates = upcomingWeekendNoons();
+    } else if (mode === "next3") {
