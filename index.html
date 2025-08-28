@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Norgesvarsel – Oslo ikoner på kart</title>
+<title>Norgesvarsel – Oslo ikoner på kart (mono)</title>
 <style>
   :root { --accent:#5bc0be; }
   body { margin:0; background:#0b132b; }
@@ -25,9 +25,11 @@
 <script>
 'use strict';
 
-const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
+// Bruk MET sitt "mono"-ikonsett (uten bakgrunn)
+const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/mono/";
 const OSLO = { lat:59.913, lon:10.739 };
 
+// --- Projeksjon ---
 const BBOX = { lonMin: 4.4, lonMax: 33.7, latMin: 57.9, latMax: 71.6 };
 function mercY(lat){ const r=Math.max(-85,Math.min(85,lat))*Math.PI/180; return Math.log(Math.tan(Math.PI/4+r/2)); }
 function projectLonLat(lon,lat){
@@ -47,6 +49,7 @@ function getRect(){
   return {ox,oy,w:cw,h:ch};
 }
 
+// --- MET forecast ---
 async function fetchMet(lat,lon){
   const url=`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
   const res=await fetch(url);
@@ -70,6 +73,7 @@ function pickSymbolCode(met,dateObj){
       || null;
 }
 
+// --- Render ---
 async function render(){
   const {x,y}=projectLonLat(OSLO.lon,OSLO.lat);
   const {ox,oy,w,h}=getRect();
@@ -79,7 +83,7 @@ async function render(){
   pin.style.left=px+"px"; pin.style.top=py+"px";
 
   const icons=document.getElementById("icons");
-  icons.style.left=(px+16)+"px"; icons.style.top=(py-24)+"px"; // til høyre for pin
+  icons.style.left=(px+16)+"px"; icons.style.top=(py-24)+"px";
   icons.innerHTML="";
 
   const dates=weekendNoons(); // default: helg
