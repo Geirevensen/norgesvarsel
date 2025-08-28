@@ -84,29 +84,70 @@
 
 <script>
   // ===== KONFIG =====
-  const USER_AGENT = "Geir Evensen/geirevensen@hotmail.com – hobbyprosjekt for å vise vær";
-  // MET weather icons (GitHub). symbol_code + ".svg".
-  // Repo: https://github.com/metno/weathericons  (bruk via jsDelivr CDN for enkel hosting)
-  const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/"; // partlycloudy_day.svg, etc.
+  const USER_AGENT = "DittNavn/epost/URL – hobbyprosjekt (krav fra MET/Yr)";
+  const ICON_BASE = "https://cdn.jsdelivr.net/gh/metno/weathericons/weather/svg/";
+  const TZ = "Europe/Oslo";
 
-  // Hjelpefunksjon: finn valgt modus
-  const modeRadio = () => document.querySelector('input[name="mode"]:checked').value;
+  // Dine 10 områder med ID
+  // NB: To duplikat-par som nevnt i svaret.
+  const AREAS = [
+    { name:"Oslo og østlandsområdet",        id:"1-72837",   x:56, y:86 },
+    { name:"Kristiansand og sørlandet",      id:"1-2376",    x:50, y:96 },
+    { name:"Åndalsnes-området og Romsdalen", id:"1-190429",  x:49, y:72 },
+    { name:"Bergen og vestlandet",           id:"1-92416",   x:40, y:86 },
+    { name:"Bohuslen og Göteborg-området",   id:"2-2693301", x:34, y:93 },
+    { name:"Henningsvær og Lofoten",         id:"1-276748",  x:62, y:41 },
+    { name:"Hemsedal og dalstrøka innafor",  id:"5-25115",   x:52, y:84 },  // = Trøndelag i lista di
+    { name:"Jotunheimen (Turtagrø)",         id:"1-162272",  x:48, y:79 },  // = Lillehammer i lista di
+    { name:"Trøndelag og Midt-Norge",        id:"5-25115",   x:55, y:64 },  // duplikat
+    { name:"Lillehammer, Hafjell og Sjusjøen", id:"1-162272", x:57, y:88 }, // duplikat
+  ];
 
-  // Oppdater tittel
+  // Visningsmodus
   function setLegend(mode) {
     const t = document.getElementById("legend-title");
     const s = document.getElementById("legend-sub");
-    if (mode === "next3") {
+    if (mode === "weekend") {
+      t.textContent = "Førstkommende helg";
+      s.textContent = "Symboler rundt lunsjtid for fredag–søndag (Europe/Oslo)";
+    } else if (mode === "next3") {
       t.textContent = "Neste 3 dager";
-      s.textContent = "Symboler cirka kl. 12:00 lokal tid (Europe/Oslo)";
-    } else if (mode === "weekend") {
-      t.textContent = "Førstkommende helg (fre–søn)";
-      s.textContent = "Symboler rundt lunsjtid for fredag, lørdag og søndag";
+      s.textContent = "Symboler ca. kl. 12:00 lokal tid";
     } else {
       t.textContent = "+7 til +9 dager";
-      s.textContent = "Symboler cirka kl. 12:00 lokal tid (Europe/Oslo)";
+      s.textContent = "Symboler ca. kl. 12:00 lokal tid";
     }
   }
+
+  // Tidshjelpere (Europe/Oslo)
+  const toLocalOslo = (d) => new Date(d.toLocaleString("en-GB", { timeZone: TZ }));
+  function localNoon(daysFromToday=0) {
+    const now = toLocalOslo(new Date());
+    const t = new Date(now);
+    t.setDate(now.getDate() + daysFromToday);
+    t.setHours(12,0,0,0);
+    return t;
+  }
+  function upcomingWeekendNoons() {
+    const now = toLocalOslo(new Date());
+    const dow = now.getDay(); // 0=Sun ... 5=Fri 6=Sat
+    const daysToFriday = (5 - dow + 7) % 7;
+    return [localNoon(daysToFriday), localNoon(daysToFriday+1), localNoon(daysToFriday+2)];
+  }
+
+  // Yr API via ID
+  async function fetchById(id) {
+    const url = `https://www.yr.no/api/v0/locations/${id}/forecast`;
+    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    if (!res.ok) throw new Error(`Yr API ${res.status}`);
+    return res.json();
+  }
+
+  // Finn passende longInterval-symbol som dekker lokal 12:00 gitt dato
+  function pickLongSymbolForDate(forecast, targetLocalNoon) {
+    const longs = forecast?.longIntervals || [];
+    if (!longs.length) return { code:null, interval:null };
+    con
 
   // Tidsverktøy – alltid Europe/Oslo
   const TZ = "Europe/Oslo";
