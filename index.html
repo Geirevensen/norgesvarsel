@@ -85,7 +85,7 @@
 </div>
 
 <div class="status" id="status">Henter værdata …</div>
-<div class="version">v2.08</div>
+<div class="version">v2.09</div>
 
 <script>
   const iconBase = "https://raw.githubusercontent.com/metno/weathericons/refs/heads/main/weather/svg/";
@@ -100,7 +100,7 @@
     { key: "trondelag",    name: "Trøndelag (Flatanger)",   lat: 64.483396, lon: 10.771859, anchor: { x: 285, y: 565 } },
     { key: "jotunheimen",  name: "Jotunheimen (Turtagrø)",  lat: 61.50441,  lon: 7.80167,   anchor: { x: 200, y: 735 } },
     { key: "lofoten",      name: "Lofoten (Henningsvær)",   lat: 68.154187, lon: 14.207253, anchor: { x: 450, y: 215 } },
-    { key: "hemsedal",     name: "Hemsedal",               lat: 60.863072, lon: 8.552333,  anchor: { x: 210, y: 785 } }
+    { key: "hemsedal",     name: "Hemsedal",               lat: 60.863072, lon: 8.552333,  anchor: { x: 210, y: 790 } }
   ];
 
   // Tripler på kartet
@@ -178,7 +178,7 @@
 
   if (isMobile) {
     // Kutt litt av høyremargen (juster tallet ved behov)
-    stage.setAttribute("viewBox", "0 0 850 1000");
+    stage.setAttribute("viewBox", "0 0 750 1000");
     panel.x = 400;  // flytt boks 50 px til venstre på mobil
   } else {
     stage.setAttribute("viewBox", "0 0 1000 1000");
