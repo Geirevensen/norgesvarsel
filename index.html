@@ -87,7 +87,7 @@
 </div>
 
 <div class="status" id="status">Laster kart …</div>
-<div class="version">v2.11</div>
+<div class="version">v2.12</div>
 
 <script>
   // --- konfig ---
@@ -213,7 +213,7 @@
   }
 
   // --- inline kart ---
-  async function inlineMapSvg() {
+  /*async function inlineMapSvg() {
     statusEl.textContent = "Laster kart …";
     try {
       const res = await fetch("norgeskart.svg", { cache: "no-store" });
@@ -232,14 +232,46 @@
       Array.from(innerSvg.childNodes).forEach(node => {
         mapLayer.appendChild(document.importNode(node, true));
       });
-
-      // Kartet skal ikke “stjele” klikk om du vil klikke på markører/radius
+        // Kartet skal ikke “stjele” klikk om du vil klikke på markører/radius
       mapLayer.setAttribute("pointer-events", "none");
     } catch (e) {
       console.error(e);
       statusEl.textContent = "Kunne ikke laste norgeskart.svg (må kjøres via webserver).";
     }
+  }*/
+  async function inlineMapSvg() {
+  statusEl.textContent = "Laster kart …";
+  try {
+    const res = await fetch("norgeskart.svg", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const svgText = await res.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgText, "image/svg+xml");
+    const innerSvg = doc.querySelector("svg");
+    if (!innerSvg) throw new Error("Fant ikke <svg> i norgeskart.svg");
+
+    // 1) Tøm layer
+    mapLayer.innerHTML = "";
+
+    // 2) Kopiér rot-attributter (som ofte styrer farger)
+    for (const name of innerSvg.getAttributeNames()) {
+      if (name === "width" || name === "height" || name === "viewBox") continue;
+      mapLayer.setAttribute(name, innerSvg.getAttribute(name));
+    }
+
+    // 3) Flytt alle barn (inkl. <defs>, <style>)
+    for (const node of Array.from(innerSvg.childNodes)) {
+      mapLayer.appendChild(document.importNode(node, true));
+    }
+
+    // 4) Kartet skal ikke stjele klikk
+    mapLayer.setAttribute("pointer-events", "none");
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Kunne ikke laste norgeskart.svg (må kjøres via webserver).";
   }
+}
 
   // --- datahenting ---
   async function fetchWeatherForAllPlaces() {
