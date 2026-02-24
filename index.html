@@ -1,288 +1,505 @@
 <!DOCTYPE html>
 <html lang="no">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Vær – Oslo & Åndalsnes (Yr Locationforecast)</title>
-  <style>
-    :root {
-      --bg: #0b1220;
-      --card: #111a2e;
-      --muted: #98a2b3;
-      --text: #e6ecf4;
-      --accent: #5eead4;
-      --ring: #334155;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: radial-gradient(1200px 800px at 10% -10%, #101a30 0%, var(--bg) 55%), var(--bg);
-      color: var(--text);
-    }
-    .app {
-      max-width: 1100px; margin: 32px auto; padding: 16px;
-    }
-    header { display:flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
-    header h1 { font-size: 20px; margin: 0; letter-spacing: 0.3px; font-weight: 650; }
-    .controls { display:flex; gap: 8px; flex-wrap: wrap; }
-    button.toggle {
-      appearance: none; border: 1px solid var(--ring); background: #0f172a; color: var(--text);
-      padding: 10px 14px; border-radius: 999px; cursor: pointer; font-weight: 600; letter-spacing: .2px;
-    }
-    button.toggle[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px #134e4a inset; }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Norgeskart med vær</title>
+<style>
+  body {
+    margin: 0;
+    background: #f4f6f8;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
 
-    .grid { display:grid; grid-template-columns: 1fr; gap: 16px; }
-    @media (min-width: 850px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .wrap { height: 100vh; display: grid; place-items: center; }
+  svg#stage { height: 100vh; width: auto; display: block; }
 
-    .card {
-      border: 1px solid var(--ring); background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00));
-      border-radius: 18px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
-    }
-    .card header { justify-content: space-between; margin-bottom: 8px; }
-    .loc {
-      display:flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: 12px; background: #0c1528; border: 1px solid var(--ring);
-    }
-    .loc .name { font-size: 16px; font-weight: 700; }
-    .loc .coords { color: var(--muted); font-size: 12px; }
+  /* UI (litt mer mot midten) */
+  .ui {
+    position: fixed;
+    top: 12px;
+    left: 110px;          /* <-- justert fra 12px */
+    transform: none;
+    background: rgba(255,255,255,0.92);
+    border-radius: 14px;
+    padding: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+    display: flex;
+    gap: 6px;
+    z-index: 10;
+    backdrop-filter: blur(6px);
+  }
+  .ui button {
+    border: 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+    font-weight: 700;
+    color: #5f6368;
+  }
+  .ui button.active {
+    background: #fff;
+    color: #1a73e8;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+  }
 
-    .days { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-    .daybox {
-      border: 1px solid var(--ring); border-radius: 14px; padding: 10px; background: #0e1a31;
-      display:flex; flex-direction: column; align-items: center; gap: 6px; min-height: 160px;
-    }
-    .date { font-weight: 700; font-size: 13px; letter-spacing:.2px; }
-    .iconwrap { width: 72px; height: 72px; display:grid; place-items:center; background: #0b1429; border-radius: 12px; border:1px solid var(--ring); }
-    .iconwrap img { width: 64px; height: 64px; display:block; }
-    .temp { font-size: 22px; font-weight: 800; }
-    .meta { color: var(--muted); font-size: 12px; }
+  .status {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    font-size: 12px;
+    color: #6b7280;
+    background: rgba(255,255,255,0.85);
+    padding: 6px 10px;
+    border-radius: 999px;
+    z-index: 10;
+  }
 
-    .footer { color: var(--muted); font-size: 12px; margin-top: 16px; }
-    .err { color: #fecaca; font-weight: 600; }
-    a { color: var(--accent); text-decoration: none; }
-  </style>
+  .version {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    font-size: 12px;
+    color: #6b7280;
+    background: rgba(255,255,255,0.85);
+    padding: 6px 10px;
+    border-radius: 999px;
+    z-index: 10;
+  }
+</style>
 </head>
 <body>
-  <div class="app">
-    <header>
-      <h1>Værsymboler: Oslo & Åndalsnes</h1>
-      <div class="controls" role="group" aria-label="Visningsvalg">
-        <button class="toggle" id="btn-next3" aria-pressed="true">Neste 3 dager</button>
-        <button class="toggle" id="btn-weekend" aria-pressed="false">Fri–Lør–Søn</button>
-      </div>
-    </header>
 
-    <div id="grid" class="grid"></div>
+<div class="ui">
+  <button id="btn3" class="active" type="button">Neste 3 dager</button>
+  <button id="btnW" type="button">Helgen</button>
+</div>
 
-    <div class="footer">
-      Data: <a href="https://api.met.no/weatherapi/locationforecast/2.0/" target="_blank" rel="noreferrer">Yr / MET Norway – Locationforecast</a> · Ikoner: <a href="https://api.met.no/images/weathericons/" target="_blank" rel="noreferrer">MET Weather Icons</a>
-      <br/>
-      <strong>Merk:</strong> For produksjon anbefales det å rute forespørslene via en lett server/proxy som legger på en identifiserende <code>User-Agent</code> (f.eks. appnavn + kontakt). Se eksempel nederst i kildekoden.
-    </div>
-  </div>
+<div class="wrap">
+  <svg id="stage" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-label="Norgeskart">
+    <image href="norgeskart.svg" x="0" y="0" width="1000" height="1000"></image>
+    <g id="markers"></g>
+  </svg>
+</div>
 
-  <script>
-    // -------------------- Konfig --------------------
-    const LOCATIONS = [
-      { name: "Oslo", lat: 59.9139, lon: 10.7522 },
-      { name: "Åndalsnes", lat: 62.5670, lon: 7.6870 },
-    ];
+<div class="status" id="status">Henter værdata …</div>
+<div class="version">v2.06</div>
 
-    // Ikonbase. symbol_code kan brukes direkte (inkl. _day/_night/_polartwilight)
-    const ICON_BASE = "https://api.met.no/images/weathericons/svg/"; // + symbol_code + ".svg"
+<script>
+  const iconBase = "https://raw.githubusercontent.com/metno/weathericons/refs/heads/main/weather/svg/";
 
-    // Europe/Oslo tidsone for gruppering per dag
-    const OSLO_TZ = "Europe/Oslo";
+  const places = [
+    { key: "lillehammer",  name: "Lillehammer",            lat: 61.11,     lon: 10.46,     anchor: { x: 289, y: 768 } },
+    { key: "kristiansand", name: "Kristiansand",           lat: 58.14671,  lon: 7.9956,    anchor: { x: 198, y: 938 } },
 
-    // -------------------- Hjelpere --------------------
-    const dayNames = ["Søn", "Man", "Tir", "Ons", "Tor", "Fre", "Lør"]; // Date.getDay()
+    { key: "bohuslan",     name: "Bohuslän (Lysekil)",      lat: 58.275573, lon: 11.435558, anchor: { x: 320, y: 920 } },
+    { key: "romsdalen",    name: "Romsdalen (Åndalsnes)",   lat: 62.567446, lon: 7.68722,   anchor: { x: 180, y: 680 } },
+    { key: "bergen",       name: "Bergen",                 lat: 60.388847, lon: 5.323993,  anchor: { x: 120, y: 815 } },
+    { key: "trondelag",    name: "Trøndelag (Flatanger)",   lat: 64.483396, lon: 10.771859, anchor: { x: 285, y: 565 } },
+    { key: "jotunheimen",  name: "Jotunheimen (Turtagrø)",  lat: 61.50441,  lon: 7.80167,   anchor: { x: 200, y: 735 } },
+    { key: "lofoten",      name: "Lofoten (Henningsvær)",   lat: 68.154187, lon: 14.207253, anchor: { x: 450, y: 215 } },
+    { key: "hemsedal",     name: "Hemsedal",               lat: 60.863072, lon: 8.552333,  anchor: { x: 210, y: 785 } }
+  ];
 
-    function toOslo(date) {
-      // Returnerer en Date som representerer samme øyeblikk, men
-      // vi bruker Intl til å hente local parts i Europe/Oslo ved formatering.
-      return new Date(date);
-    }
+  // Tripler på kartet
+  let iconSize = 34;
+  let iconSpacing = 38;
 
-    function formatDateLabel(d) {
-      const day = dayNames[new Intl.DateTimeFormat('no-NO', { timeZone: OSLO_TZ, weekday: 'short'}).formatToParts(d).find(p=>p.type==='weekday').value.startsWith('sø') ? 0 : d.getDay()];
-      // Enklere og korrekt: bruk egen format for både ukedag og dato
-      const f = new Intl.DateTimeFormat('no-NO', { timeZone: OSLO_TZ, weekday: 'short', day: 'numeric', month: 'short' });
-      return f.format(d).replace(/\.$/, ''); // fjern evt. punktum etter mnd.
-    }
+  const clickRadius = Math.max(26, Math.round(iconSize * 0.85));
 
-    function startOfLocalDay(d) {
-      return new Date(new Intl.DateTimeFormat('sv-SE', { timeZone: OSLO_TZ, year:'numeric', month:'2-digit', day:'2-digit'}).format(d) + 'T00:00:00');
-    }
+  const panel = { x: 450, y: 400, w: 320, h: 410, r: 14, pad: 16, rowH: 44, icon: 26 };
 
-    function addDays(d, n) { const nd = new Date(d); nd.setDate(nd.getDate()+n); return nd; }
+  const stage = document.getElementById("stage");
+  const markers = document.getElementById("markers");
+  const statusEl = document.getElementById("status");
+  const btn3 = document.getElementById("btn3");
+  const btnW = document.getElementById("btnW");
 
-    function nextWeekendDates(ref = new Date()) {
-      // Finn førstkommende fredag-lørdag-søndag i Europe/Oslo
-      const refLocal = new Date(new Intl.DateTimeFormat('sv-SE', { timeZone: OSLO_TZ, year:'numeric', month:'2-digit', day:'2-digit', hour: '2-digit', minute: '2-digit', second:'2-digit'}).format(ref).replace(' ', 'T'));
-      const day = refLocal.getDay(); // 0=Sun .. 6=Sat
-      const daysToFriday = (5 - (day === 0 ? 7 : day)) % 7; // til 5 (Fre)
-      const friday = startOfLocalDay(addDays(refLocal, daysToFriday >=0 ? daysToFriday : daysToFriday + 7));
-      return [friday, addDays(friday,1), addDays(friday,2)];
-    }
+  const placeDayPoints = new Map();
+  let currentMode = "3days";
 
-    function next3Dates(ref = new Date()) {
-      const today = startOfLocalDay(ref);
-      return [today, addDays(today,1), addDays(today,2)];
-    }
+  let panelVisible = false;
+  let selectedPlaceKey = null;
 
-    function pickClosestToNoon(times, targetDay) {
-      // Velg datapunkt nærmest kl 12:00 lokal tid for gitt kalenderdag
-      const noonLocal = new Date(new Intl.DateTimeFormat('sv-SE', { timeZone: OSLO_TZ, year:'numeric', month:'2-digit', day:'2-digit'}).format(targetDay) + 'T12:00:00');
-      let best = null; let bestDiff = Infinity;
-      for (const t of times) {
-        const dt = new Date(t.time); // time er ISO UTC fra API
-        // Sjekk at dt er samme lokale kalenderdag som targetDay
-        const dtLocalYMD = new Intl.DateTimeFormat('sv-SE', { timeZone: OSLO_TZ, year:'numeric', month:'2-digit', day:'2-digit'}).format(dt);
-        const tgtYMD = new Intl.DateTimeFormat('sv-SE', { timeZone: OSLO_TZ, year:'numeric', month:'2-digit', day:'2-digit'}).format(targetDay);
-        if (dtLocalYMD !== tgtYMD) continue;
-        const diff = Math.abs(new Date(dt).getTime() - noonLocal.getTime());
-        if (diff < bestDiff) { bestDiff = diff; best = t; }
+  // Fade-state
+  let panelAnimating = false;
+  let panelCurrentOpacity = 0;
+
+  btn3.addEventListener("click", () => updateView("3days"));
+  btnW.addEventListener("click", () => updateView("weekend"));
+
+  stage.addEventListener("click", (evt) => {
+    const pt = clientToSvgPoint(evt.clientX, evt.clientY, stage);
+
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const p of places) {
+      const dx = pt.x - p.anchor.x;
+      const dy = pt.y - p.anchor.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = p;
       }
-      return best; // kan være null
     }
 
-    // -------------------- API --------------------
-    async function fetchForecast(lat, lon) {
-      const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
-      // NB: I produksjon bør dette prox'ies via server for å sette identifiserende User-Agent.
-      const res = await fetch(url, {
-        headers: {
-          // Browsere lar ikke sette User-Agent. Legg på valgfri X-Requested-With for egen kontroll.
-          'Accept': 'application/json'
-        }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      // timeseries: [{ time, data: { instant: { details: { air_temperature, ... } }, next_1_hours: { summary: { symbol_code }, details: { precipitation_amount } }, ... }}]
-      return data.properties.timeseries.map(ts => ({
-        time: ts.time,
-        temp: ts.data?.instant?.details?.air_temperature ?? null,
-        symbol: ts.data?.next_1_hours?.summary?.symbol_code || ts.data?.next_6_hours?.summary?.symbol_code || null,
-        precip: ts.data?.next_1_hours?.details?.precipitation_amount ?? ts.data?.next_6_hours?.details?.precipitation_amount ?? null,
-      }));
-    }
+    if (best && bestDist <= clickRadius) {
+      if (selectedPlaceKey === best.key) {
+        // toggle samme sted
+        panelVisible = !panelVisible;
+        if (panelVisible) fadePanelIn(best.key);
+        else fadePanelOutAndRemove();
+      } else {
+        // bytt sted og vis panel
+        selectedPlaceKey = best.key;
+        panelVisible = true;
 
-    // -------------------- Rendering --------------------
-    function renderLocationCard(container, locName, lat, lon, mode, dataset) {
-      const card = document.createElement('div');
-      card.className = 'card';
-
-      const head = document.createElement('header');
-      const loc = document.createElement('div');
-      loc.className = 'loc';
-      loc.innerHTML = `<span class="name">${locName}</span><span class="coords">${lat.toFixed(3)}, ${lon.toFixed(3)}</span>`;
-      head.appendChild(loc);
-      card.appendChild(head);
-
-      const daysWrap = document.createElement('div');
-      daysWrap.className = 'days';
-
-      const targetDates = (mode === 'weekend') ? nextWeekendDates(new Date()) : next3Dates(new Date());
-
-      for (const d of targetDates) {
-        const pick = pickClosestToNoon(dataset, d);
-        const box = document.createElement('div');
-        box.className = 'daybox';
-
-        const lbl = document.createElement('div');
-        lbl.className = 'date';
-        lbl.textContent = formatDateLabel(d);
-
-        const iconWrap = document.createElement('div');
-        iconWrap.className = 'iconwrap';
-
-        const temp = document.createElement('div');
-        temp.className = 'temp';
-
-        const meta = document.createElement('div');
-        meta.className = 'meta';
-
-        if (pick && pick.symbol) {
-          const img = document.createElement('img');
-          img.alt = pick.symbol;
-          img.decoding = 'async';
-          img.loading = 'lazy';
-          img.src = ICON_BASE + encodeURIComponent(pick.symbol) + '.svg';
-          iconWrap.appendChild(img);
-          const t = (pick.temp !== null && pick.temp !== undefined) ? Math.round(pick.temp) + '°C' : '—';
-          temp.textContent = t;
-          meta.textContent = (pick.precip != null) ? `${pick.precip.toFixed(1)} mm` : '';
+        // hvis panelet er oppe: fade ut → bytt innhold → fade inn
+        if (document.getElementById("forecastPanel")) {
+          fadePanelOutIn(best.key);
         } else {
-          iconWrap.innerHTML = '<span style="font-size:12px;color:var(--muted);text-align:center;padding:4px">Ingen data</span>';
-          temp.textContent = '—';
-          meta.textContent = '';
-        }
-
-        box.appendChild(lbl);
-        box.appendChild(iconWrap);
-        box.appendChild(temp);
-        box.appendChild(meta);
-        daysWrap.appendChild(box);
-      }
-
-      card.appendChild(daysWrap);
-      container.appendChild(card);
-    }
-
-    async function render(mode = 'next3') {
-      const grid = document.getElementById('grid');
-      grid.innerHTML = '';
-      for (const loc of LOCATIONS) {
-        const wrapper = document.createElement('div');
-        grid.appendChild(wrapper);
-        try {
-          const series = await fetchForecast(loc.lat, loc.lon);
-          renderLocationCard(wrapper, loc.name, loc.lat, loc.lon, mode, series);
-        } catch (err) {
-          wrapper.innerHTML = `<div class="card"><div class="err">Kunne ikke hente data for ${loc.name}: ${err.message}</div></div>`;
+          fadePanelIn(best.key);
         }
       }
+      return;
     }
 
-    // -------------------- UI wiring --------------------
-    const btnNext3 = document.getElementById('btn-next3');
-    const btnWeekend = document.getElementById('btn-weekend');
+    // Klikk utenfor: lukk panel
+    if (panelVisible) {
+      panelVisible = false;
+      fadePanelOutAndRemove();
+    }
+  });
 
-    function setMode(nextMode) {
-      const isWeekend = nextMode === 'weekend';
-      btnNext3.setAttribute('aria-pressed', String(!isWeekend));
-      btnWeekend.setAttribute('aria-pressed', String(isWeekend));
-      render(isWeekend ? 'weekend' : 'next3');
+  function setActive(mode) {
+    btn3.classList.toggle("active", mode === "3days");
+    btnW.classList.toggle("active", mode === "weekend");
+  }
+
+  async function fetchWeatherForAllPlaces() {
+    statusEl.textContent = "Henter værdata …";
+    try {
+      await Promise.all(
+        places.map(async (p) => {
+          const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${p.lat}&lon=${p.lon}`;
+          const res = await fetchWithTimeout(url, 12000);
+          if (!res.ok) throw new Error(`${p.name}: HTTP ${res.status} ${res.statusText}`);
+          const json = await res.json();
+          placeDayPoints.set(p.key, groupDataByDay(json.properties.timeseries));
+        })
+      );
+
+      statusEl.textContent = "Vær lastet. Klikk på et sted i kartet.";
+      updateView(currentMode);
+    } catch (e) {
+      console.error(e);
+      statusEl.textContent = `Kunne ikke hente værdata: ${e.message || e}`;
+    }
+  }
+
+  function updateView(mode) {
+    const modeChanged = (mode !== currentMode);
+    currentMode = mode;
+    setActive(mode);
+
+    markers.innerHTML = "";
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0,0,0,0);
+
+    for (const p of places) {
+      const dayPoints = placeDayPoints.get(p.key);
+      if (!dayPoints || !dayPoints.length) continue;
+
+      const picked = pickThree(dayPoints, mode, startOfToday);
+      if (!picked.length) continue;
+
+      const xs = [p.anchor.x - iconSpacing, p.anchor.x, p.anchor.x + iconSpacing];
+
+      picked.forEach((dp, i) => {
+        const symbol =
+          dp.data?.next_12_hours?.summary?.symbol_code ||
+          dp.data?.next_1_hours?.summary?.symbol_code ||
+          "clearsky_day";
+
+        const g = svgEl("g");
+        g.setAttribute("transform", `translate(${xs[i]} ${p.anchor.y})`);
+
+        const img = svgEl("image");
+        img.setAttribute("href", `${iconBase}${symbol}.svg`);
+        img.setAttribute("x", String(-iconSize / 2));
+        img.setAttribute("y", String(-iconSize / 2));
+        img.setAttribute("width", String(iconSize));
+        img.setAttribute("height", String(iconSize));
+
+        g.appendChild(img);
+        markers.appendChild(g);
+      });
     }
 
-    btnNext3.addEventListener('click', () => setMode('next3'));
-    btnWeekend.addEventListener('click', () => setMode('weekend'));
+    // Hvis panel er synlig og mode endret: fade ut → inn med oppdatert innhold
+    if (panelVisible && selectedPlaceKey) {
+      if (modeChanged) fadePanelOutIn(selectedPlaceKey);
+      else render7DayPanel(selectedPlaceKey, /*keepOpacity*/ true);
+    }
 
-    // Initial
-    render('next3');
+    statusEl.textContent = (mode === "3days")
+      ? "Viser neste 3 dager (klikk på et sted for 7 dager)."
+      : "Viser fredag–søndag (klikk på et sted for 7 dager).";
+  }
 
-    // -------------------- Eksempel: enkel proxy (Cloudflare Worker)
-    /*
-    export default {
-      async fetch(request, env) {
-        const url = new URL(request.url);
-        if (url.pathname === '/forecast') {
-          const lat = url.searchParams.get('lat');
-          const lon = url.searchParams.get('lon');
-          const upstream = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
-          const res = await fetch(upstream, {
-            headers: {
-              'User-Agent': 'Kreaturing-VaerDashboard/1.0 (kontakt: your-email@example.com)',
-              'Accept': 'application/json',
-            }
-          });
-          return new Response(res.body, {
-            headers: { 'content-type': 'application/json', 'cache-control': 's-maxage=600' }
-          });
+  function pickThree(dayPoints, mode, startOfToday) {
+    const picked = [];
+
+    for (const dp of dayPoints) {
+      const d = new Date(dp.time);
+      if (d.getTime() < startOfToday.getTime()) continue;
+
+      const dow = d.getDay(); // 0=søn ... 5=fre 6=lør
+      const ok = (mode === "3days") ? true : (dow === 5 || dow === 6 || dow === 0);
+
+      if (ok) {
+        picked.push(dp);
+        if (picked.length === 3) break;
+      }
+    }
+
+    if (picked.length < 3) {
+      for (const dp of dayPoints) {
+        if (picked.includes(dp)) continue;
+        const d = new Date(dp.time);
+        if (d.getTime() < startOfToday.getTime()) continue;
+        picked.push(dp);
+        if (picked.length === 3) break;
+      }
+    }
+
+    return picked.slice(0, 3);
+  }
+
+  function groupDataByDay(timeseries) {
+    const groups = {};
+    for (const item of timeseries) {
+      const d = new Date(item.time);
+      const key = d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+      (groups[key] ||= []).push(item);
+    }
+
+    return Object.keys(groups).sort().map(key => {
+      const points = groups[key];
+      let best = points[0];
+      let bestDiff = 999;
+
+      for (const p of points) {
+        const hour = new Date(p.time).getHours();
+        const diff = Math.abs(hour - 12);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = p;
         }
-        return new Response('OK');
+      }
+      return best;
+    });
+  }
+
+  // -------- panelrender + fade --------
+
+  function render7DayPanel(placeKey, keepOpacity = false) {
+    const prevOpacity = keepOpacity ? panelCurrentOpacity : 1;
+
+    remove7DayPanel();
+
+    const p = places.find(x => x.key === placeKey);
+    const dayPoints = placeDayPoints.get(placeKey);
+    if (!p || !dayPoints || !dayPoints.length) return;
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0,0,0,0);
+
+    const picked7 = [];
+    for (const dp of dayPoints) {
+      const d = new Date(dp.time);
+      if (d.getTime() < startOfToday.getTime()) continue;
+      picked7.push(dp);
+      if (picked7.length === 7) break;
+    }
+
+    const g = svgEl("g");
+    g.setAttribute("id", "forecastPanel");
+    g.setAttribute("opacity", String(prevOpacity));
+
+    const rect = svgEl("rect");
+    rect.setAttribute("x", panel.x);
+    rect.setAttribute("y", panel.y);
+    rect.setAttribute("width", panel.w);
+    rect.setAttribute("height", panel.h);
+    rect.setAttribute("rx", panel.r);
+    rect.setAttribute("ry", panel.r);
+    rect.setAttribute("fill", "rgba(255,255,255,0.92)");
+    rect.setAttribute("stroke", "rgba(17,24,39,0.15)");
+    rect.setAttribute("stroke-width", "1");
+    g.appendChild(rect);
+
+    const title = svgEl("text");
+    title.setAttribute("x", panel.x + panel.pad);
+    title.setAttribute("y", panel.y + panel.pad + 6);
+    title.setAttribute("font-size", "18");
+    title.setAttribute("font-weight", "700");
+    title.setAttribute("fill", "#111827");
+    title.setAttribute("dominant-baseline", "hanging");
+    title.textContent = p.name;
+    g.appendChild(title);
+
+    const sep = svgEl("line");
+    sep.setAttribute("x1", panel.x + panel.pad);
+    sep.setAttribute("x2", panel.x + panel.w - panel.pad);
+    sep.setAttribute("y1", panel.y + panel.pad + 34);
+    sep.setAttribute("y2", panel.y + panel.pad + 34);
+    sep.setAttribute("stroke", "rgba(17,24,39,0.12)");
+    sep.setAttribute("stroke-width", "1");
+    g.appendChild(sep);
+
+    const startY = panel.y + panel.pad + 48;
+
+    picked7.forEach((dp, i) => {
+      const t = new Date(dp.time);
+      const symbol =
+        dp.data?.next_12_hours?.summary?.symbol_code ||
+        dp.data?.next_1_hours?.summary?.symbol_code ||
+        "clearsky_day";
+
+      const rowY = startY + i * panel.rowH;
+
+      const dateTxt = svgEl("text");
+      dateTxt.setAttribute("x", panel.x + panel.pad);
+      dateTxt.setAttribute("y", rowY);
+      dateTxt.setAttribute("font-size", "14");
+      dateTxt.setAttribute("fill", "#111827");
+      dateTxt.setAttribute("dominant-baseline", "middle");
+      const weekday = t.toLocaleDateString("no-NO", { weekday: "short" }).replace(".", "");
+      const date = t.toLocaleDateString("no-NO", { day: "2-digit", month: "2-digit" });
+      dateTxt.textContent = `${weekday} ${date}`;
+      g.appendChild(dateTxt);
+
+      const img = svgEl("image");
+      img.setAttribute("href", `${iconBase}${symbol}.svg`);
+      img.setAttribute("width", panel.icon);
+      img.setAttribute("height", panel.icon);
+      img.setAttribute("x", panel.x + panel.w - panel.pad - panel.icon);
+      img.setAttribute("y", rowY - panel.icon / 2);
+      g.appendChild(img);
+
+      if (i < picked7.length - 1) {
+        const line = svgEl("line");
+        line.setAttribute("x1", panel.x + panel.pad);
+        line.setAttribute("x2", panel.x + panel.w - panel.pad);
+        line.setAttribute("y1", rowY + panel.rowH / 2);
+        line.setAttribute("y2", rowY + panel.rowH / 2);
+        line.setAttribute("stroke", "rgba(17,24,39,0.08)");
+        line.setAttribute("stroke-width", "1");
+        g.appendChild(line);
+      }
+    });
+
+    stage.appendChild(g);
+  }
+
+  function remove7DayPanel() {
+    const old = document.getElementById("forecastPanel");
+    if (old) old.remove();
+  }
+
+  function setPanelOpacity(value) {
+    panelCurrentOpacity = value;
+    const g = document.getElementById("forecastPanel");
+    if (g) g.setAttribute("opacity", String(value));
+  }
+
+  function animateOpacity(from, to, durationMs, onDone) {
+    if (panelAnimating) return; // unngå overlappende animasjoner
+    panelAnimating = true;
+
+    const start = performance.now();
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = t * (2 - t); // enkel ease-out
+      const val = from + (to - from) * eased;
+      setPanelOpacity(val);
+
+      if (t < 1) requestAnimationFrame(tick);
+      else {
+        panelAnimating = false;
+        if (onDone) onDone();
       }
     };
-    */
-  </script>
+    setPanelOpacity(from);
+    requestAnimationFrame(tick);
+  }
+
+  function fadePanelIn(placeKey) {
+    render7DayPanel(placeKey);
+    setPanelOpacity(0);
+    animateOpacity(0, 1, 180);
+  }
+
+  function fadePanelOutAndRemove() {
+    const g = document.getElementById("forecastPanel");
+    if (!g) return;
+    const startOpacity = panelCurrentOpacity || 1;
+
+    animateOpacity(startOpacity, 0, 140, () => {
+      remove7DayPanel();
+      panelCurrentOpacity = 0;
+    });
+  }
+
+  function fadePanelOutIn(placeKey) {
+    const g = document.getElementById("forecastPanel");
+    if (!g) {
+      fadePanelIn(placeKey);
+      return;
+    }
+    const startOpacity = panelCurrentOpacity || 1;
+
+    animateOpacity(startOpacity, 0, 120, () => {
+      render7DayPanel(placeKey);
+      setPanelOpacity(0);
+      animateOpacity(0, 1, 180);
+    });
+  }
+
+  // -------- utils --------
+
+  function svgEl(name) {
+    return document.createElementNS("http://www.w3.org/2000/svg", name);
+  }
+
+  function clientToSvgPoint(clientX, clientY, svg) {
+    const p = svg.createSVGPoint();
+    p.x = clientX;
+    p.y = clientY;
+
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+
+    const sp = p.matrixTransform(ctm.inverse());
+    return { x: sp.x, y: sp.y };
+  }
+
+  async function fetchWithTimeout(url, ms) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), ms);
+    try {
+      return await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  fetchWeatherForAllPlaces();
+</script>
+
 </body>
 </html>
