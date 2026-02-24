@@ -111,8 +111,8 @@
 
   // Panel (9 dager)
   const panel = {
-    x: 450, y: 380,
-    w: 360, h: 520,     // høyere for 9 rader
+    x: 400, y: 380,
+    w: 360, h: 500,     // høyere for 9 rader
     r: 14, pad: 16,
     rowH: 46, icon: 26
   };
@@ -172,6 +172,24 @@
       fadePanelOutAndRemove();
     }
   });
+
+  function applyResponsiveLayout() {
+  const isMobile = window.matchMedia("(max-width: 600px)").matches;
+
+  if (isMobile) {
+    // Kutt litt av høyremargen (juster tallet ved behov)
+    stage.setAttribute("viewBox", "0 0 850 1000");
+    panel.x = 400;  // flytt boks 50 px til venstre på mobil
+  } else {
+    stage.setAttribute("viewBox", "0 0 1000 1000");
+    panel.x = 450;  // normal desktop-posisjon
+  }
+
+  // Hvis panel er synlig, tegn det på nytt med ny posisjon
+  if (panelVisible && selectedPlaceKey) {
+    render9DayPanel(selectedPlaceKey, true);
+  }
+  }
 
   function setActive(mode) {
     btn3.classList.toggle("active", mode === "3days");
