@@ -87,18 +87,18 @@
 </div>
 
 <div class="status" id="status">Laster kart …</div>
-<div class="version">v2.16</div>
+<div class="version">v2.17</div>
 
 <script>
   // --- konfig ---
   const iconBase = "https://raw.githubusercontent.com/metno/weathericons/refs/heads/main/weather/svg/";
 
   const places = [
-    { key: "lillehammer",  name: "Lillehammer",            lat: 61.11,     lon: 10.46,     anchor: { x: 290, y: 765 } },
-    { key: "kristiansand", name: "Kristiansand",           lat: 58.14671,  lon: 7.9956,    anchor: { x: 160, y: 938 } },
+    { key: "lillehammer",  name: "Lillehammer",            lat: 61.11,     lon: 10.46,     anchor: { x: 300, y: 765 } },
+    { key: "kristiansand", name: "Kristiansand",           lat: 58.14671,  lon: 7.9956,    anchor: { x: 170, y: 938 } },
     { key: "bohuslan",     name: "Bohuslän (Lysekil)",      lat: 58.275573, lon: 11.435558, anchor: { x: 325, y: 920 } },
-    { key: "romsdalen",    name: "Romsdalen (Åndalsnes)",   lat: 62.567446, lon: 7.68722,   anchor: { x: 140, y: 680 } },
-    { key: "bergen",       name: "Bergen",                 lat: 60.388847, lon: 5.323993,  anchor: { x: 80, y: 825 } },
+    { key: "romsdalen",    name: "Romsdalen (Åndalsnes)",   lat: 62.567446, lon: 7.68722,   anchor: { x: 140, y: 670 } },
+    { key: "bergen",       name: "Bergen",                 lat: 60.388847, lon: 5.323993,  anchor: { x: 80, y: 870 } },
     { key: "trondelag",    name: "Trøndelag (Flatanger)",   lat: 64.483396, lon: 10.771859, anchor: { x: 245, y: 565 } },
     { key: "jotunheimen",  name: "Jotunheimen (Turtagrø)",  lat: 61.50441,  lon: 7.80167,   anchor: { x: 160, y: 735 } },
     { key: "lofoten",      name: "Lofoten (Henningsvær)",   lat: 68.154187, lon: 14.207253, anchor: { x: 410, y: 215 } },
@@ -131,7 +131,7 @@
 
   // Mobil-crop: kutt litt i øst (juster tallet om du vil)
   const viewBoxDesktop = "0 0 1000 1000";
-  const viewBoxMobile  = "0 0 850 1000";
+ const viewBoxMobileStart = "0 320 920 680";  // innzoomet Sør-Norge
 
   // --- dom ---
   const stage = document.getElementById("stage");
@@ -202,15 +202,19 @@
 
   // --- responsivt utsnitt + panelposisjon ---
   function applyResponsiveLayout() {
-    const isMobile = window.innerWidth <= 600;
-    stage.setAttribute("viewBox", isMobile ? viewBoxMobile : viewBoxDesktop);
-    panel.x = isMobile ? panelXMobile : panelXDesktop;
+  const isMobile = window.innerWidth <= 600;
 
-    // Hvis panel er synlig: re-render i samme opacity for å “flytte” det uten blink
-    if (panelVisible && selectedPlaceKey) {
-      render9DayPanel(selectedPlaceKey, true);
-    }
+  if (isMobile) {
+    stage.setAttribute("viewBox", viewBoxMobileStart);
+    panel.x = panelXMobile;
+  } else {
+    stage.setAttribute("viewBox", viewBoxDesktop);
+    panel.x = panelXDesktop;
   }
+}
+
+  if (panelVisible && selectedPlaceKey) render9DayPanel(selectedPlaceKey, true);
+}
 
   // --- inline kart ---
   /*async function inlineMapSvg() {
