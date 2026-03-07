@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Norgeskart med vær</title>
+<style>
+  body {
+    margin: 0;
+    background: #f4f6f8;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+
+  /* Fyll skjermen på mobil og desktop */
+  .wrap { width: 100vw; height: 100vh; display: grid; place-items: center; }
+  svg#stage { width: 100vw; height: 100vh; display: block; }
+
+  /* UI litt inn fra venstre */
+  .ui {
+    position: fixed;
+    top: 12px;
+    left: 90px;
+    background: rgba(255,255,255,0.92);
+    border-radius: 14px;
+    padding: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+    display: flex;
+    gap: 6px;
+    z-index: 10;
+    backdrop-filter: blur(6px);
+  }
+  .ui button {
+    border: 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+    font-weight: 700;
+    color: #5f6368;
+  }
+  .ui button.active {
+    background: #fff;
+    color: #1a73e8;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+  }
+
+  .status {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    font-size: 12px;
+    color: #6b7280;
+    background: rgba(255,255,255,0.85);
+    padding: 6px 10px;
+    border-radius: 999px;
+    z-index: 10;
+  }
+
+  .version {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    font-size: 12px;
+    color: #6b7280;
+    background: rgba(255,255,255,0.85);
+    padding: 6px 10px;
+    border-radius: 999px;
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+
+<div class="ui">
+  <button id="btn3" class="active" type="button">Neste 3 dager</button>
+  <button id="btnW" type="button">Helgen</button>
+</div>
+
+<div class="wrap">
+  <svg id="stage" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-label="Norgeskart">
+    <!-- Inline kartet inn hit -->
+    <g id="mapLayer"></g>
+
+    <!-- Markører over kartet -->
+    <g id="markers"></g>
+  </svg>
+</div>
+
+<div class="status" id="status">Laster kart …</div>
+<div class="version">v2.17</div>
+
+<script>
+  // --- konfig ---
+  const iconBase = "https://raw.githubusercontent.com/metno/weathericons/refs/heads/main/weather/svg/";
+
+  const places = [
+    { key: "lillehammer",  name: "Lillehammer",            lat: 61.11,     lon: 10.46,     anchor: { x: 300, y: 765 } },
+    { key: "kristiansand", name: "Kristiansand",           lat: 58.14671,  lon: 7.9956,    anchor: { x: 170, y: 938 } },
+    { key: "bohuslan",     name: "Bohuslän (Lysekil)",      lat: 58.275573, lon: 11.435558, anchor: { x: 325, y: 920 } },
+    { key: "romsdalen",    name: "Romsdalen (Åndalsnes)",   lat: 62.567446, lon: 7.68722,   anchor: { x: 140, y: 670 } },
+    { key: "bergen",       name: "Bergen",                 lat: 60.388847, lon: 5.323993,  anchor: { x: 80, y: 870 } },
+    { key: "trondelag",    name: "Trøndelag (Flatanger)",   lat: 64.483396, lon: 10.771859, anchor: { x: 245, y: 565 } },
+    { key: "jotunheimen",  name: "Jotunheimen (Turtagrø)",  lat: 61.50441,  lon: 7.80167,   anchor: { x: 160, y: 735 } },
+    { key: "lofoten",      name: "Lofoten (Henningsvær)",   lat: 68.154187, lon: 14.207253, anchor: { x: 410, y: 215 } },
+    { key: "hemsedal",     name: "Hemsedal",               lat: 60.863072, lon: 8.552333,  anchor: { x: 170, y: 795 } }
+  ];
+
+  // Tripler på kartet
+  let iconSize = 34;
+  let iconSpacing = 38;
+
+  // Pill-bakgrunn bak tripler
+  const pill = {
+    padX: 12,
+    padY: 10,
+    fill: "rgba(255,255,255,0.75)",
+    stroke: "rgba(17,24,39,0.12)",
+    strokeWidth: 1
+  };
+
+  // Klikk-radius (i kartkoordinater)
+  const clickRadius = Math.max(26, Math.round(iconSize * 0.85));
+
+  // Panel: desktop base-pos, mobil flyttes 50 px til venstre
+  const panel = {
+    x: 450, y: 380, w: 300, h: 510,
+    r: 14, pad: 16, rowH: 48, icon: 26
+  };
+  const panelXDesktop = 450;
+  const panelXMobile = panelXDesktop - 50;
+
+  // Mobil-crop: kutt litt i øst (juster tallet om du vil)
+  const viewBoxDesktop = "0 0 1000 1000";
+ const viewBoxMobileStart = "30 380 860 600";  // innzoomet Sør-Norge (mobil-start)
+
+  // --- dom ---
+  const stage = document.getElementById("stage");
+  const mapLayer = document.getElementById("mapLayer");
+  const markers = document.getElementById("markers");
+  const statusEl = document.getElementById("status");
+  const btn3 = document.getElementById("btn3");
+  const btnW = document.getElementById("btnW");
+
+  // --- state ---
+  const placeDayPoints = new Map(); // key -> dayPoints[]
+  let currentMode = "3days";
+
+  let panelVisible = false;
+  let selectedPlaceKey = null;
+
+  // Fade-state
+  let panelAnimating = false;
+  let panelCurrentOpacity = 0;
+
+  // --- init ---
+  btn3.addEventListener("click", () => updateView("3days"));
+  btnW.addEventListener("click", () => updateView("weekend"));
+
+  stage.addEventListener("click", (evt) => {
+    const pt = clientToSvgPoint(evt.clientX, evt.clientY, stage);
+
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const p of places) {
+      const dx = pt.x - p.anchor.x;
+      const dy = pt.y - p.anchor.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < bestDist) { bestDist = dist; best = p; }
+    }
+
+    if (best && bestDist <= clickRadius) {
+      if (selectedPlaceKey === best.key) {
+        panelVisible = !panelVisible;
+        if (panelVisible) fadePanelIn(best.key);
+        else fadePanelOutAndRemove();
+      } else {
+        selectedPlaceKey = best.key;
+        panelVisible = true;
+
+        if (document.getElementById("forecastPanel")) fadePanelOutIn(best.key);
+        else fadePanelIn(best.key);
+      }
+      return;
+    }
+
+    if (panelVisible) {
+      panelVisible = false;
+      fadePanelOutAndRemove();
+    }
+  });
+
+  window.addEventListener("resize", applyResponsiveLayout);
+
+  (async function boot() {
+    applyResponsiveLayout();
+    await inlineMapSvg();          // <- viktig for at crop skal fungere
+    await fetchWeatherForAllPlaces();
+    updateView(currentMode);
+    statusEl.textContent = "Vær lastet. Klikk på et sted i kartet.";
+  })();
+
+  // --- responsivt utsnitt + panelposisjon ---
+  function applyResponsiveLayout() {
+  const isMobile = window.innerWidth <= 600;
+
+  if (isMobile) {
+    stage.setAttribute("viewBox", viewBoxMobileStart);
+    panel.x = panelXMobile;
+  } else {
+    stage.setAttribute("viewBox", viewBoxDesktop);
+    panel.x = panelXDesktop;
+  }
+  if (panelVisible && selectedPlaceKey) render9DayPanel(selectedPlaceKey, true);
+}
+
+  // --- inline kart ---
+  /*async function inlineMapSvg() {
+    statusEl.textContent = "Laster kart …";
+    try {
+      const res = await fetch("norgeskart.svg", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const svgText = await res.text();
+
+      // Parse SVG og importer child nodes inn i mapLayer (uten ekstra <svg>-wrapper)
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgText, "image/svg+xml");
+      const innerSvg = doc.querySelector("svg");
+      if (!innerSvg) throw new Error("Fant ikke <svg> i norgeskart.svg");
+
+      // Flytt alle barn inn i vår scene
+      mapLayer.innerHTML = "";
+      Array.from(innerSvg.childNodes).forEach(node => {
+        mapLayer.appendChild(document.importNode(node, true));
+      });
+        // Kartet skal ikke “stjele” klikk om du vil klikke på markører/radius
+      mapLayer.setAttribute("pointer-events", "none");
+    } catch (e) {
+      console.error(e);
+      statusEl.textContent = "Kunne ikke laste norgeskart.svg (må kjøres via webserver).";
+    }
+  }*/
+  async function inlineMapSvg() {
+  statusEl.textContent = "Laster kart …";
+  try {
+    const res = await fetch("norgeskart.svg", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const svgText = await res.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgText, "image/svg+xml");
+    const innerSvg = doc.querySelector("svg");
+    if (!innerSvg) throw new Error("Fant ikke <svg> i norgeskart.svg");
+
+    // 1) Tøm layer
+    mapLayer.innerHTML = "";
+
+    // 2) Kopiér rot-attributter (som ofte styrer farger)
+    for (const name of innerSvg.getAttributeNames()) {
+      if (name === "width" || name === "height" || name === "viewBox") continue;
+      mapLayer.setAttribute(name, innerSvg.getAttribute(name));
+    }
+
+    // 3) Flytt alle barn (inkl. <defs>, <style>)
+    for (const node of Array.from(innerSvg.childNodes)) {
+      mapLayer.appendChild(document.importNode(node, true));
+    }
+
+    // 4) Kartet skal ikke stjele klikk
+    mapLayer.setAttribute("pointer-events", "none");
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Kunne ikke laste norgeskart.svg (må kjøres via webserver).";
+  }
+}
+
+  // --- datahenting ---
+  async function fetchWeatherForAllPlaces() {
+    statusEl.textContent = "Henter værdata …";
+    await Promise.all(
+      places.map(async (p) => {
+        const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${p.lat}&lon=${p.lon}`;
+        const res = await fetchWithTimeout(url, 12000);
+        if (!res.ok) throw new Error(`${p.name}: HTTP ${res.status} ${res.statusText}`);
+        const json = await res.json();
+        placeDayPoints.set(p.key, groupDataByDay(json.properties.timeseries));
+      })
+    );
+  }
+
+  // --- visning (kart) ---
+  function updateView(mode) {
+    const modeChanged = (mode !== currentMode);
+    currentMode = mode;
+    setActive(mode);
+
+    markers.innerHTML = "";
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0,0,0,0);
+
+    for (const p of places) {
+      const dayPoints = placeDayPoints.get(p.key);
+      if (!dayPoints || !dayPoints.length) continue;
+
+      const picked = pickThree(dayPoints, mode, startOfToday);
+      if (picked.length < 3) continue;
+
+      renderTripleWithPill(p, picked);
+    }
+
+    // Panel: ved mode-bytte mens panelet er åpent -> fade ut → inn
+    if (panelVisible && selectedPlaceKey) {
+      if (modeChanged) fadePanelOutIn(selectedPlaceKey);
+      else render9DayPanel(selectedPlaceKey, true);
+    }
+
+    statusEl.textContent = (mode === "3days")
+      ? "Viser neste 3 dager (klikk på et sted for 9 dager)."
+      : "Viser fredag–søndag (klikk på et sted for 9 dager).";
+  }
+
+  function renderTripleWithPill(place, picked3) {
+    const g = svgEl("g");
+    g.setAttribute("transform", `translate(${place.anchor.x} ${place.anchor.y})`);
+
+    const totalIconsW = (iconSpacing * 2) + iconSize; // venstre->høyre ytterkant
+    const pillW = totalIconsW + pill.padX * 2;
+    const pillH = iconSize + pill.padY * 2;
+
+    const rect = svgEl("rect");
+    rect.setAttribute("x", String(-pillW / 2));
+    rect.setAttribute("y", String(-pillH / 2));
+    rect.setAttribute("width", String(pillW));
+    rect.setAttribute("height", String(pillH));
+    rect.setAttribute("rx", String(pillH / 2));
+    rect.setAttribute("ry", String(pillH / 2));
+    rect.setAttribute("fill", pill.fill);
+    rect.setAttribute("stroke", pill.stroke);
+    rect.setAttribute("stroke-width", String(pill.strokeWidth));
+    g.appendChild(rect);
+
+    const xs = [-iconSpacing, 0, +iconSpacing];
+    picked3.forEach((dp, i) => {
+      const symbol =
+        dp.data?.next_12_hours?.summary?.symbol_code ||
+        dp.data?.next_1_hours?.summary?.symbol_code ||
+        "clearsky_day";
+
+      const img = svgEl("image");
+      img.setAttribute("href", `${iconBase}${symbol}.svg`);
+      img.setAttribute("x", String(xs[i] - iconSize / 2));
+      img.setAttribute("y", String(-iconSize / 2));
+      img.setAttribute("width", String(iconSize));
+      img.setAttribute("height", String(iconSize));
+      g.appendChild(img);
+    });
+
+    markers.appendChild(g);
+  }
+
+  function setActive(mode) {
+    btn3.classList.toggle("active", mode === "3days");
+    btnW.classList.toggle("active", mode === "weekend");
+  }
+
+  function pickThree(dayPoints, mode, startOfToday) {
+    const picked = [];
+
+    // Helgelogikk: finn hvilken helg vi skal vise
+    let weekendStart = null;
+    if (mode === "weekend") {
+      const now = new Date();
+      const dow = now.getDay();   // 0=søn 1=man ... 5=fre 6=lør
+      const hour = now.getHours();
+
+      // Er vi "midt i helgen" (fre >= 16, lør hele dagen, søn hele dagen)?
+      const inCurrentWeekend = (dow === 5 && hour >= 16) || dow === 6 || dow === 0;
+
+      if (inCurrentWeekend) {
+        // Hopp til neste fredag
+        const nextFriday = new Date(now);
+        const daysUntilNextFriday = (5 - dow + 7) % 7 || 7; // alltid minst 1
+        nextFriday.setDate(now.getDate() + daysUntilNextFriday);
+        nextFriday.setHours(0, 0, 0, 0);
+        weekendStart = nextFriday;
+      }
+    }
+
+    for (const dp of dayPoints) {
+      const d = new Date(dp.time);
+      if (d.getTime() < startOfToday.getTime()) continue;
+
+      // Hvis weekendStart er satt, ignorer datoer før den
+      if (weekendStart && d.getTime() < weekendStart.getTime()) continue;
+
+      const dow = d.getDay(); // 0=søn ... 5=fre 6=lør
+      const ok = (mode === "3days") ? true : (dow === 5 || dow === 6 || dow === 0); // fre/lør/søn
+
+      if (ok) {
+        picked.push(dp);
+        if (picked.length === 3) break;
+      }
+    }
+
+    // Fyll opp hvis helg ga færre enn 3
+    if (picked.length < 3) {
+      for (const dp of dayPoints) {
+        if (picked.includes(dp)) continue;
+        const d = new Date(dp.time);
+        if (d.getTime() < startOfToday.getTime()) continue;
+        picked.push(dp);
+        if (picked.length === 3) break;
+      }
+    }
+
+    return picked.slice(0, 3);
+  }
+
+  // Gruppér per lokal dato og velg datapunkt nærmest kl 12
+  function groupDataByDay(timeseries) {
+    const groups = {};
+    for (const item of timeseries) {
+      const d = new Date(item.time);
+      const key = d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+      (groups[key] ||= []).push(item);
+    }
+
+    return Object.keys(groups).sort().map(key => {
+      const points = groups[key];
+      let best = points[0];
+      let bestDiff = 999;
+
+      for (const p of points) {
+        const hour = new Date(p.time).getHours();
+        const diff = Math.abs(hour - 12);
+        if (diff < bestDiff) { bestDiff = diff; best = p; }
+      }
+      return best;
+    });
+  }
+
+  // --- panel: 9 dager + regler + layout ---
+  function render9DayPanel(placeKey, keepOpacity = false) {
+    const prevOpacity = keepOpacity ? panelCurrentOpacity : 1;
+    removePanel();
+
+    const place = places.find(x => x.key === placeKey);
+    const dayPoints = placeDayPoints.get(placeKey);
+    if (!place || !dayPoints || !dayPoints.length) return;
+
+    // Regel: hvis klokka > 16, start fra i morgen
+    const startDate = new Date();
+    startDate.setHours(0,0,0,0);
+    if (new Date().getHours() > 16) startDate.setDate(startDate.getDate() + 1);
+
+    const picked = [];
+    for (const dp of dayPoints) {
+      const d = new Date(dp.time);
+      if (d.getTime() < startDate.getTime()) continue;
+      picked.push(dp);
+      if (picked.length === 9) break;
+    }
+
+    const g = svgEl("g");
+    g.setAttribute("id", "forecastPanel");
+    g.setAttribute("opacity", String(prevOpacity));
+
+    // Bakgrunn
+    const rect = svgEl("rect");
+    rect.setAttribute("x", panel.x);
+    rect.setAttribute("y", panel.y);
+    rect.setAttribute("width", panel.w);
+    rect.setAttribute("height", panel.h);
+    rect.setAttribute("rx", panel.r);
+    rect.setAttribute("ry", panel.r);
+    rect.setAttribute("fill", "rgba(255,255,255,0.92)");
+    rect.setAttribute("stroke", "rgba(17,24,39,0.15)");
+    rect.setAttribute("stroke-width", "1");
+    g.appendChild(rect);
+
+    // Tittel
+    const title = svgEl("text");
+    title.setAttribute("x", panel.x + panel.pad);
+    title.setAttribute("y", panel.y + panel.pad + 6);
+    title.setAttribute("font-size", "18");
+    title.setAttribute("font-weight", "700");
+    title.setAttribute("fill", "#111827");
+    title.setAttribute("dominant-baseline", "hanging");
+    title.textContent = place.name;
+    g.appendChild(title);
+
+    // Separator
+    const sep = svgEl("line");
+    sep.setAttribute("x1", panel.x + panel.pad);
+    sep.setAttribute("x2", panel.x + panel.w - panel.pad);
+    sep.setAttribute("y1", panel.y + panel.pad + 34);
+    sep.setAttribute("y2", panel.y + panel.pad + 34);
+    sep.setAttribute("stroke", "rgba(17,24,39,0.12)");
+    sep.setAttribute("stroke-width", "1");
+    g.appendChild(sep);
+
+    // Kolonner: dato | temp | ikon | vind
+    const xDate = panel.x + panel.pad;
+
+    const xRight = panel.x + panel.w - panel.pad;
+    const xWindTextEnd = xRight;                   // vind (høyrejustert)
+    const xIcon = xRight - 84;                     // ikonet litt til venstre for vind
+    const xTempEnd = xIcon - 12;                   // temp før ikonet
+
+    const startY = panel.y + panel.pad + 54;
+
+    picked.forEach((dp, i) => {
+      const rowY = startY + i * panel.rowH;
+      const t = new Date(dp.time);
+
+      const symbol =
+        dp.data?.next_12_hours?.summary?.symbol_code ||
+        dp.data?.next_1_hours?.summary?.symbol_code ||
+        "clearsky_day";
+
+      const temp = dp.data?.instant?.details?.air_temperature;
+      const windSpeed = dp.data?.instant?.details?.wind_speed;
+      const windDir = dp.data?.instant?.details?.wind_from_direction;
+
+      // Dato
+      const dateTxt = svgEl("text");
+      dateTxt.setAttribute("x", xDate);
+      dateTxt.setAttribute("y", rowY);
+      dateTxt.setAttribute("font-size", "14");
+      dateTxt.setAttribute("fill", "#111827");
+      dateTxt.setAttribute("dominant-baseline", "middle");
+      const weekday = t.toLocaleDateString("no-NO", { weekday: "short" }).replace(".", "");
+      const date = t.toLocaleDateString("no-NO", { day: "2-digit", month: "2-digit" });
+      dateTxt.textContent = `${weekday} ${date}`;
+      g.appendChild(dateTxt);
+
+      // Temperatur (fet, rød >=0, blå <0)
+      const tempTxt = svgEl("text");
+      tempTxt.setAttribute("x", xTempEnd);
+      tempTxt.setAttribute("y", rowY);
+      tempTxt.setAttribute("font-size", "14");
+      tempTxt.setAttribute("font-weight", "700");
+      tempTxt.setAttribute("dominant-baseline", "middle");
+      tempTxt.setAttribute("text-anchor", "end");
+      if (typeof temp === "number") {
+        tempTxt.setAttribute("fill", temp >= 0 ? "#dc2626" : "#2563eb");
+        tempTxt.textContent = `${Math.round(temp)}°`;
+      } else {
+        tempTxt.setAttribute("fill", "#111827");
+        tempTxt.textContent = "–";
+      }
+      g.appendChild(tempTxt);
+
+      // Ikon (mellom temp og vind)
+      const img = svgEl("image");
+      img.setAttribute("href", `${iconBase}${symbol}.svg`);
+      img.setAttribute("width", panel.icon);
+      img.setAttribute("height", panel.icon);
+      img.setAttribute("x", xIcon);
+      img.setAttribute("y", rowY - panel.icon / 2);
+      g.appendChild(img);
+
+      // Vind: pil (rotert) + hastighet, høyrejustert
+      const windG = svgEl("g");
+      windG.setAttribute("transform", `translate(${xWindTextEnd} ${rowY})`);
+
+      // Pil-symbol (↑), rotert rundt sitt eget senter
+      const arrow = svgEl("text");
+      arrow.setAttribute("x", "-44");
+      arrow.setAttribute("y", "0");
+      arrow.setAttribute("font-size", "14");
+      arrow.setAttribute("fill", "#111827");
+      arrow.setAttribute("dominant-baseline", "middle");
+      arrow.setAttribute("text-anchor", "middle");
+      arrow.textContent = "↑";
+
+      // MET: wind_from_direction er retningen vinden kommer FRA.
+      // Vi viser pilen der vinden blåser TIL (pluss 180°) – mer intuitivt for mange.
+      if (typeof windDir === "number") {
+        const toDeg = (windDir + 180) % 360;
+        arrow.setAttribute("transform", `rotate(${toDeg} -44 0)`);
+      }
+      windG.appendChild(arrow);
+
+      // Vindtekst
+      const windTxt = svgEl("text");
+      windTxt.setAttribute("x", "0");
+      windTxt.setAttribute("y", "0");
+      windTxt.setAttribute("font-size", "14");
+      windTxt.setAttribute("fill", "#111827");
+      windTxt.setAttribute("dominant-baseline", "middle");
+      windTxt.setAttribute("text-anchor", "end");
+      windTxt.textContent = (typeof windSpeed === "number") ? `${Math.round(windSpeed)} m/s` : "–";
+      windG.appendChild(windTxt);
+
+      g.appendChild(windG);
+
+      // Radskille
+      if (i < picked.length - 1) {
+        const line = svgEl("line");
+        line.setAttribute("x1", panel.x + panel.pad);
+        line.setAttribute("x2", panel.x + panel.w - panel.pad);
+        line.setAttribute("y1", rowY + panel.rowH / 2);
+        line.setAttribute("y2", rowY + panel.rowH / 2);
+        line.setAttribute("stroke", "rgba(17,24,39,0.08)");
+        line.setAttribute("stroke-width", "1");
+        g.appendChild(line);
+      }
+    });
+
+    stage.appendChild(g);
+  }
+
+  // --- fade ---
+  function removePanel() {
+    const old = document.getElementById("forecastPanel");
+    if (old) old.remove();
+  }
+
+  function setPanelOpacity(value) {
+    panelCurrentOpacity = value;
+    const g = document.getElementById("forecastPanel");
+    if (g) g.setAttribute("opacity", String(value));
+  }
+
+  function animateOpacity(from, to, durationMs, onDone) {
+    if (panelAnimating) return;
+    panelAnimating = true;
+
+    const start = performance.now();
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = t * (2 - t); // ease-out
+      const val = from + (to - from) * eased;
+      setPanelOpacity(val);
+
+      if (t < 1) requestAnimationFrame(tick);
+      else {
+        panelAnimating = false;
+        if (onDone) onDone();
+      }
+    };
+
+    setPanelOpacity(from);
+    requestAnimationFrame(tick);
+  }
+
+  function fadePanelIn(placeKey) {
+    render9DayPanel(placeKey);
+    setPanelOpacity(0);
+    animateOpacity(0, 1, 180);
+  }
+
+  function fadePanelOutAndRemove() {
+    const g = document.getElementById("forecastPanel");
+    if (!g) return;
+    const startOpacity = panelCurrentOpacity || 1;
+
+    animateOpacity(startOpacity, 0, 140, () => {
+      removePanel();
+      panelCurrentOpacity = 0;
+    });
+  }
+
+  function fadePanelOutIn(placeKey) {
+    const g = document.getElementById("forecastPanel");
+    if (!g) { fadePanelIn(placeKey); return; }
+
+    const startOpacity = panelCurrentOpacity || 1;
+    animateOpacity(startOpacity, 0, 120, () => {
+      render9DayPanel(placeKey);
+      setPanelOpacity(0);
+      animateOpacity(0, 1, 180);
+    });
+  }
+
+  // --- utils ---
+  function svgEl(name) {
+    return document.createElementNS("http://www.w3.org/2000/svg", name);
+  }
+
+  function clientToSvgPoint(clientX, clientY, svg) {
+    const p = svg.createSVGPoint();
+    p.x = clientX;
+    p.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    const sp = p.matrixTransform(ctm.inverse());
+    return { x: sp.x, y: sp.y };
+  }
+
+  async function fetchWithTimeout(url, ms) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), ms);
+    try {
+      return await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(t);
+    }
+  }
+</script>
+
+</body>
+</html>
