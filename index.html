@@ -87,7 +87,7 @@
 </div>
 
 <div class="status" id="status">Laster kart …</div>
-<div class="version">v2.20</div>
+<div class="version">v2.21</div>
 
 <script>
   // --- konfig ---
@@ -131,7 +131,7 @@
 
   // Mobil-crop: kutt litt i øst (juster tallet om du vil)
   const viewBoxDesktop = "0 0 1000 1000";
- const viewBoxMobileStart = "50 400 850 580";  // innzoomet Sør-Norge (mobil-start)
+ const viewBoxMobileStart = "0 300 800 700";  // mobil-start: juster tallene etter smak
 
   // --- dom ---
   const stage = document.getElementById("stage");
@@ -202,7 +202,7 @@
 
   // --- responsivt utsnitt + panelposisjon ---
   function applyResponsiveLayout() {
-  const isMobile = window.innerWidth <= 600;
+  const isMobile = window.innerWidth <= 768;
 
   if (isMobile) {
     stage.setAttribute("viewBox", viewBoxMobileStart);
@@ -690,91 +690,6 @@
     const sp = p.matrixTransform(ctm.inverse());
     return { x: sp.x, y: sp.y };
   }
-
-  // --- touch pan/zoom (mobil) ---
-  (function initTouchPanZoom() {
-    if (!('ontouchstart' in window)) return;
-
-    let vb = { x: 0, y: 0, w: 1000, h: 1000 };
-
-    function parseViewBox() {
-      const parts = stage.getAttribute("viewBox").split(/\s+/).map(Number);
-      vb = { x: parts[0], y: parts[1], w: parts[2], h: parts[3] };
-    }
-
-    function setViewBox() {
-      vb.w = Math.max(200, Math.min(1000, vb.w));
-      vb.h = Math.max(200, Math.min(1000, vb.h));
-      vb.x = Math.max(0, Math.min(1000 - vb.w, vb.x));
-      vb.y = Math.max(0, Math.min(1000 - vb.h, vb.y));
-      stage.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
-    }
-
-    function clientToVb(clientX, clientY) {
-      const rect = stage.getBoundingClientRect();
-      return {
-        x: vb.x + (clientX - rect.left) * (vb.w / rect.width),
-        y: vb.y + (clientY - rect.top)  * (vb.h / rect.height)
-      };
-    }
-
-    let lastTouches = null;
-    let touchMoved = false;
-
-    stage.addEventListener("touchstart", (e) => {
-      parseViewBox();
-      lastTouches = Array.from(e.touches);
-      touchMoved = false;
-    }, { passive: true });
-
-    stage.addEventListener("touchmove", (e) => {
-      e.preventDefault();
-      const touches = Array.from(e.touches);
-
-      if (touches.length === 1 && lastTouches && lastTouches.length === 1) {
-        const dx = touches[0].clientX - lastTouches[0].clientX;
-        const dy = touches[0].clientY - lastTouches[0].clientY;
-        const rect = stage.getBoundingClientRect();
-        vb.x -= dx * (vb.w / rect.width);
-        vb.y -= dy * (vb.h / rect.height);
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) touchMoved = true;
-        setViewBox();
-
-      } else if (touches.length === 2 && lastTouches && lastTouches.length >= 2) {
-        const prevDist = Math.hypot(
-          lastTouches[0].clientX - lastTouches[1].clientX,
-          lastTouches[0].clientY - lastTouches[1].clientY
-        );
-        const newDist = Math.hypot(
-          touches[0].clientX - touches[1].clientX,
-          touches[0].clientY - touches[1].clientY
-        );
-        if (prevDist === 0) { lastTouches = touches; return; }
-
-        const scale = prevDist / newDist;
-        const midClient = {
-          x: (touches[0].clientX + touches[1].clientX) / 2,
-          y: (touches[0].clientY + touches[1].clientY) / 2
-        };
-        const mid = clientToVb(midClient.x, midClient.y);
-
-        vb.x = mid.x - (mid.x - vb.x) * scale;
-        vb.y = mid.y - (mid.y - vb.y) * scale;
-        vb.w *= scale;
-        vb.h *= scale;
-        touchMoved = true;
-        setViewBox();
-      }
-
-      lastTouches = touches;
-    }, { passive: false });
-
-    // Hindre at pan/pinch trigges som klikk
-    stage.addEventListener("touchend", (e) => {
-      if (touchMoved) e.stopPropagation();
-      lastTouches = Array.from(e.touches);
-    }, { passive: true });
-  })();
 
     async function fetchWithTimeout(url, ms) {
     const controller = new AbortController();
