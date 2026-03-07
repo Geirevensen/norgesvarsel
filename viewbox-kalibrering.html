@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ViewBox-kalibrering</title>
+<style>
+  body { margin: 0; background: #1a1a2e; font-family: system-ui, sans-serif; }
+  svg#stage { width: 100vw; height: 100vh; display: block; }
+
+  .hud {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.82);
+    color: #fff;
+    border-radius: 16px;
+    padding: 14px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    z-index: 20;
+    min-width: 280px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+
+  #vbDisplay {
+    font-family: monospace;
+    font-size: 15px;
+    color: #7dd3fc;
+    letter-spacing: 0.02em;
+  }
+
+  #widthDisplay {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  button {
+    background: #1d4ed8;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 22px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+  }
+  button:active { background: #1e40af; }
+
+  #copied {
+    font-size: 13px;
+    color: #4ade80;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<svg id="stage" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-label="Norgeskart">
+  <g id="mapLayer"></g>
+</svg>
+
+<div class="hud">
+  <div id="widthDisplay">window.innerWidth: <strong id="wVal">–</strong>px</div>
+  <div id="vbDisplay">viewBox: <span id="vbVal">–</span></div>
+  <button onclick="copyViewBox()">📋 Kopier viewBox</button>
+  <div id="copied">✅ Kopiert!</div>
+</div>
+
+<script>
+  const stage = document.getElementById("stage");
+  const vbVal = document.getElementById("vbVal");
+  const wVal = document.getElementById("wVal");
+
+  wVal.textContent = window.innerWidth;
+
+  // Last inn kartet
+  (async function () {
+    try {
+      const res = await fetch("norgeskart.svg", { cache: "no-store" });
+      if (!res.ok) throw new Error("Fant ikke norgeskart.svg");
+      const text = await res.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "image/svg+xml");
+      const inner = doc.querySelector("svg");
+      const layer = document.getElementById("mapLayer");
+      for (const node of Array.from(inner.childNodes)) {
+        layer.appendChild(document.importNode(node, true));
+      }
+      layer.setAttribute("pointer-events", "none");
+    } catch (e) {
+      console.error(e);
+    }
+  })();
+
+  // Oppdater visning av viewBox
+  function updateDisplay() {
+    vbVal.textContent = stage.getAttribute("viewBox");
+  }
+
+  updateDisplay();
+
+  // Observer endringer i viewBox (nettleser-zoom/pan endrer den ikke direkte,
+  // men vi poller hvert sekund for å fange eventuelle endringer)
+  setInterval(() => {
+    updateDisplay();
+    wVal.textContent = window.innerWidth;
+  }, 500);
+
+  function copyViewBox() {
+    const vb = stage.getAttribute("viewBox");
+    navigator.clipboard.writeText(vb).then(() => {
+      const el = document.getElementById("copied");
+      el.style.display = "block";
+      setTimeout(() => el.style.display = "none", 2000);
+    });
+  }
+</script>
+
+</body>
+</html>
